@@ -1,0 +1,20 @@
+node_modules/
+.expo/
+dist/
+*.log
+.DS_Store
+*.tgz
+coverage/
+.env
+.env.local
+*.zip
+
+# Native projects — EAS builds these in the cloud (CNG); do not commit
+/android/
+/ios/
+
+# Build output
+*.aab
+
+# Claude Code local settings (per-machine permissions)
+.claude/settings.local.json

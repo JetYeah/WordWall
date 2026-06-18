@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "字垣",
+    "slug": "wordwall",
+    "version": "2.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "wordwall",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#14110A"
+    },
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-audio",
+      "expo-sharing",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableBundleCompression": true,
+            "buildArchs": ["arm64-v8a"],
+            "extraProguardRules": "# Keep React Native + Hermes internals under R8 (release minify enabled)\n-keep class com.facebook.hermes.** { *; }\n-keep class com.facebook.react.** { *; }\n-keepattributes RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations,AnnotationDefault,Signature,InnerClasses,EnclosingMethod,Exceptions\n-keepclassmembers class * { @com.facebook.react.bridge.* <methods>; }"
+          }
+        }
+      ]
+    ],
+    "ios": {
+      "icon": "./assets/icon.png"
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "android": {
+      "package": "com.jetyeah.wordwall",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundImage": "./assets/adaptive-icon-background.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "7b7f848a-fcec-4dff-a689-7818a9be22bc"
+      }
+    },
+    "owner": "jetyeah"
+  }
+}

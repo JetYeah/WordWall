@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>字垣 · 外围动效方案预览（待选）</title>
+<!--
+  独立预览页 —— 模拟游戏「核心解密区」之外的外围文字墙动效，提供若干候选方案供挑选。
+  选定后我再据此修改 src/screens/GameScreen.tsx 的 swayX/swayY/breath 动效。
+  双击即可打开。每个方案用纯 CSS 动画演示；切到对应按钮即可实时对比。
+-->
+<style>
+  :root {
+    --wallBg: #F5E6C8;
+    --wallText: #3D2B1F;
+    --mask: rgb(26, 22, 18);
+    --gold: #C8A96E;
+    --pageBg: #07060A;
+    --ink: #F3E8D2;
+    --inkSoft: #9C8B66;
+    --inkFaint: #6B5E42;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--pageBg); color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 30px 20px 80px; }
+  h1 { font-size: 22px; font-weight: 800; color: var(--gold); letter-spacing: 6px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); font-size: 13px; margin-bottom: 14px; }
+  .note { color: var(--inkFaint); font-size: 12px; line-height: 1.7; margin: 10px 0 22px;
+    border-left: 2px solid var(--gold); padding: 8px 14px; background: rgba(200,169,110,0.04); }
+  .note b { color: var(--inkSoft); }
+
+  .layout { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ── 手机框 ── */
+  .frame {
+    position: relative; width: 370px; height: 660px; flex: 0 0 auto;
+    background: var(--wallBg); overflow: hidden; border-radius: 26px;
+    box-shadow: 0 18px 44px rgba(0,0,0,0.5); border: 1px solid #2a2218;
+  }
+  .wall { position: absolute; inset: 0; z-index: 1; will-change: transform; }
+  .ch { position: absolute; color: var(--wallText); line-height: 1; user-select: none; }
+
+  /* 核心解密区（清空，金框） */
+  .core {
+    position: absolute; z-index: 4;
+    left: var(--cx); top: var(--cy); width: var(--cw); height: var(--ch);
+    border: 3px solid var(--gold); border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(200,169,110,0.25);
+    background: rgba(245,230,200,0.0);
+  }
+  .core::after {
+    content: '核心解密区（静止）'; position: absolute; top: 8px; left: 0; right: 0;
+    text-align: center; font-size: 11px; color: rgba(200,169,110,0.6); letter-spacing: 2px;
+  }
+
+  /* 外围磨砂条（动效作用对象） */
+  .frost { position: absolute; z-index: 2; background: var(--mask); opacity: 0.5; }
+  .frost-top    { left: 0; top: 0; right: 0; height: var(--cy); }
+  .frost-bottom { left: 0; bottom: 0; right: 0; height: calc(100% - var(--cy) - var(--ch)); }
+  .frost-left   { left: 0; top: var(--cy); width: var(--cx); height: var(--ch); }
+  .frost-right  { right: 0; top: var(--cy); width: calc(100% - var(--cx) - var(--cw)); height: var(--ch); }
+
+  /* 流光带（仅 sweep 方案显示） */
+  .sweep {
+    position: absolute; z-index: 3; left: 0; right: 0; height: 150px;
+    background: linear-gradient(transparent, rgba(200,169,110,0.20) 45%, rgba(255,240,210,0.16) 50%, rgba(200,169,110,0.20) 55%, transparent);
+    opacity: 0; pointer-events: none; will-change: transform;
+  }
+
+  /* ── 方案：近乎静止 ── 极缓极浅呼吸，无抖动 */
+  .s-nearstatic .frost { animation: ns-breath 30s ease-in-out infinite; }
+  @keyframes ns-breath { 0%,100% { opacity: .50; } 50% { opacity: .545; } }
+
+  /* ── 方案：缓墨呼吸 ── 缓、中等幅度，四条边相位错开 */
+  .s-breath .frost-top    { animation: br 14s ease-in-out infinite; }
+  .s-breath .frost-bottom { animation: br 14s ease-in-out infinite -3.5s; }
+  .s-breath .frost-left   { animation: br 14s ease-in-out infinite -7s; }
+  .s-breath .frost-right  { animation: br 14s ease-in-out infinite -10.5s; }
+  @keyframes br { 0%,100% { opacity: .40; } 50% { opacity: .58; } }
+
+  /* ── 方案：流光缓扫 ── 暖光带竖向缓扫，无抖动无呼吸 */
+  .s-sweep .sweep { opacity: 1; animation: sweep 16s linear infinite; }
+  @keyframes sweep { 0% { transform: translateY(-160px); } 100% { transform: translateY(660px); } }
+
+  /* ── 方案：字符微烁 ── 外围字符各自明灭（不动整体） */
+  .s-twinkle .ch { animation: tw var(--dur,4s) ease-in-out infinite; animation-delay: var(--d,0s); }
+  @keyframes tw { 0%,100% { opacity: var(--omin,.55); } 50% { opacity: var(--omax,.92); } }
+
+  /* ── 方案：当前（对照）── 微抖动 + 呼吸，近似线上现状 */
+  .s-current .wall { animation: jitter 5s ease-in-out infinite; }
+  .s-current .frost-top    { animation: cur-breath 8s ease-in-out infinite; }
+  .s-current .frost-bottom { animation: cur-breath 8s ease-in-out infinite -2s; }
+  .s-current .frost-left   { animation: cur-breath 8s ease-in-out infinite -4s; }
+  .s-current .frost-right  { animation: cur-breath 8s ease-in-out infinite -6s; }
+  @keyframes jitter { 0%,100%{ transform: translate(0,0);} 25%{ transform: translate(3px,-2px);} 50%{ transform: translate(-3px,3px);} 75%{ transform: translate(2px,2px);} }
+  @keyframes cur-breath { 0%,100% { opacity: .50; } 50% { opacity: .62; } }
+
+  /* ── 右侧控制 + 说明 ── */
+  .panel { flex: 1 1 320px; min-width: 280px; }
+  .schemes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .scheme-btn {
+    text-align: left; background: #110E16; color: var(--ink);
+    border: 1px solid rgba(200,169,110,0.22); border-radius: 12px;
+    padding: 12px 14px; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .scheme-btn:hover { border-color: rgba(200,169,110,0.5); }
+  .scheme-btn.on { background: rgba(200,169,110,0.14); border-color: var(--gold); }
+  .scheme-btn .name { font-size: 14px; font-weight: 700; color: var(--gold); letter-spacing: 1px; }
+  .scheme-btn .tag  { font-size: 11px; color: var(--inkSoft); margin-top: 3px; }
+  .desc-box {
+    background: #0E0C12; border: 1px solid rgba(200,169,110,0.18); border-radius: 12px;
+    padding: 14px 16px; font-size: 13px; line-height: 1.8; color: var(--inkSoft); min-height: 120px;
+  }
+  .desc-box h3 { margin: 0 0 8px; font-size: 15px; color: var(--gold); letter-spacing: 2px; }
+  .desc-box b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>字 垣 · 外围动效方案</h1>
+  <div class="sub">核心解密区之外的外围文字墙动效 —— 候选方案预览（选定后再接入 GameScreen）</div>
+  <div class="note">
+    黄框内是<b>核心解密区（静止）</b>，框外是<b>外围文字墙</b>（动效作用区域）。右侧点选方案，左侧实时演示。
+    目标：贴近汉兜/词影的<b>克制、文气、不躁</b>。挑一个你喜欢的（或告诉我"两个混一下"），我再据此改 <b>src/screens/GameScreen.tsx</b> 的 swayX/swayY/breath。
+  </div>
+
+  <div class="layout">
+    <div class="frame s-nearstatic" id="frame">
+      <div class="wall" id="wall"></div>
+      <div class="sweep"></div>
+      <div class="frost frost-top"></div>
+      <div class="frost frost-bottom"></div>
+      <div class="frost frost-left"></div>
+      <div class="frost frost-right"></div>
+      <div class="core"></div>
+    </div>
+
+    <div class="panel">
+      <div class="schemes" id="schemes"></div>
+      <div class="desc-box" id="descBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var FILLER = "山水风云雨雪月光日星石林泉影声色空明清寒暖春秋冬花鸟鱼龙天地人言心思情梦路桥门窗书笔墨纸砚茶酒诗画琴棋";
+
+// —— 确定性 PRNG（保证刷新后面板一致）——
+var _s = 12345;
+function rnd() { _s = (_s + 0x6D2B79F5) | 0; var t = Math.imul(_s ^ (_s >>> 15), 1 | _s);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+
+// —— 几何 ——
+var FRAME_W = 370, FRAME_H = 660, CELL = 22;
+var COLS = Math.floor(FRAME_W / CELL), ROWS = Math.floor(FRAME_H / CELL);
+// 核心区（居中，约占 64% 宽 × 52% 高）
+var coreCols = Math.floor(COLS * 0.62), coreRows = Math.floor(ROWS * 0.50);
+var c0 = Math.floor((COLS - coreCols) / 2), r0 = Math.floor((ROWS - coreRows) / 2);
+var cx = c0 * CELL, cy = r0 * CELL, cw = coreCols * CELL, ch = coreRows * CELL;
+
+var frame = document.getElementById('frame');
+frame.style.setProperty('--cx', cx + 'px');
+frame.style.setProperty('--cy', cy + 'px');
+frame.style.setProperty('--cw', cw + 'px');
+frame.style.setProperty('--ch', ch + 'px');
+
+// —— 生成外围文字墙（跳过核心区）——
+var wall = document.getElementById('wall');
+var frag = document.createDocumentFragment();
+for (var r = 0; r < ROWS; r++) {
+  for (var c = 0; c < COLS; c++) {
+    if (c >= c0 && c < c0 + coreCols && r >= r0 && r < r0 + coreRows) continue; // 核心区清空
+    var ch_ = FILLER.charAt(Math.floor(rnd() * FILLER.length));
+    var span = document.createElement('span');
+    span.className = 'ch';
+    span.textContent = ch_;
+    var op = 0.5 + rnd() * 0.4;          // 0.5–0.9
+    var bold = rnd() > 0.6 ? 700 : 400;
+    var rot = (rnd() - 0.5) * 16;          // ±8°
+    span.style.left = (c * CELL) + 'px';
+    span.style.top = (r * CELL + 2) + 'px';
+    span.style.fontSize = (15 + Math.floor(rnd() * 5)) + 'px';
+    span.style.fontWeight = bold;
+    span.style.opacity = op.toFixed(2);
+    span.style.transform = 'rotate(' + rot.toFixed(1) + 'deg)';
+    // 字符微烁方案用：保留底/顶不透明度 + 随机延迟/周期
+    span.style.setProperty('--omin', (op * 0.7).toFixed(2));
+    span.style.setProperty('--omax', Math.min(0.95, op + 0.25).toFixed(2));
+    span.style.setProperty('--d', (rnd() * 5).toFixed(2) + 's');
+    span.style.setProperty('--dur', (3.5 + rnd() * 3.5).toFixed(2) + 's');
+    frag.appendChild(span);
+  }
+}
+wall.appendChild(frag);
+
+// —— 方案 ——
+var SCHEMES = [
+  { key: 's-nearstatic', name: '近乎静止', tag: '极缓极浅呼吸 · 无抖动 · 最克制',
+    desc: '<h3>近乎静止（克制）</h3>完全去掉抖动，外围磨砂层只做<b>极缓（30s）、极浅（不透明度 ±2%）</b>的呼吸。几乎看不出在动，但非完全死寂。<b>最贴近汉兜/词影的"静"</b>。' },
+  { key: 's-breath', name: '缓墨呼吸', tag: '缓 · 中等幅度 · 四边错相',
+    desc: '<h3>缓墨呼吸（冥想）</h3>去掉抖动，外围磨砂层做<b>缓（14s）、中等幅度（0.40↔0.58）</b>的呼吸，四条边相位错开，像墨色缓慢浓淡。比"近乎静止"更明显，仍有禅意。' },
+  { key: 's-sweep', name: '流光缓扫', tag: '暖光带竖向缓扫 · 其余静止',
+    desc: '<h3>流光缓扫（雅）</h3>去掉抖动与呼吸，改为<b>一道柔和暖金光带沿竖直方向缓慢扫过</b>整面文字墙（16s 一程），像日光移过纸面。其余时间完全静止，文气而灵动。' },
+  { key: 's-twinkle', name: '字符微烁', tag: '外围字符各自明灭 · 如浮尘',
+    desc: '<h3>字符微烁（文人气）</h3>去掉整体抖动/呼吸，改为<b>外围字符各自以不同节奏轻微明灭</b>（随机延迟/周期），像浮尘、星点。有"活气"但不躁，最像旧书页上的光斑。' },
+  { key: 's-current', name: '当前方案（对照）', tag: '微抖动 ±4px + 磨砂呼吸',
+    desc: '<h3>当前方案（对照）</h3>现线上外围动效：<b>整体微抖动（±3~4px）+ 磨砂层呼吸</b>。保留此选项作对比——你觉得它"有点不合适"的就是这个。' },
+];
+
+var schemesEl = document.getElementById('schemes');
+var descBox = document.getElementById('descBox');
+SCHEMES.forEach(function (s, i) {
+  var b = document.createElement('button');
+  b.className = 'scheme-btn' + (i === 0 ? ' on' : '');
+  b.innerHTML = '<div class="name">' + s.name + '</div><div class="tag">' + s.tag + '</div>';
+  b.onclick = function () {
+    frame.className = 'frame ' + s.key;
+    schemesEl.querySelectorAll('.scheme-btn').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+    descBox.innerHTML = s.desc;
+  };
+  schemesEl.appendChild(b);
+});
+descBox.innerHTML = SCHEMES[0].desc;
+</script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>字垣 · 品牌资产生成器</title>
+<style>
+  :root{
+    --bg:#0A0906; --panel:#14110A; --ink:#F3E8D2; --inkSoft:#9C8B66; --inkFaint:#5d513c;
+    --gold:#C8A96E; --green:#4CAF50; --line:#2a2114; --copper:#C8824E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;}
+  .wrap{max-width:1120px;margin:0 auto;padding:32px 20px 96px}
+  h1{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:2px;margin:0 0 4px}
+  .sub{color:var(--inkSoft);margin:0 0 6px}
+  .note{color:var(--inkFaint);font-size:12.5px;line-height:1.75;margin:8px 0 26px;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+  .note b{color:var(--inkSoft)}
+  .note code{color:var(--gold)}
+  .controls{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:26px}
+  .ctrl-row{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center}
+  .ctrl-row > label{font-size:12.5px;color:var(--inkSoft);display:flex;align-items:center;gap:8px}
+  .seg{display:inline-flex;gap:4px}
+  .seg button{background:#1d1810;color:var(--inkSoft);border:1px solid var(--line);border-radius:6px;
+    padding:6px 12px;font-size:12.5px;cursor:pointer}
+  .seg button.on{background:var(--gold);color:#14110a;border-color:var(--gold);font-weight:700}
+  input[type=number]{width:84px;background:#1d1810;color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:6px 8px;font-size:13px}
+  input[type=range]{width:170px;accent-color:var(--gold)}
+  .dlAll{background:var(--gold);color:#14110a;border:none;border-radius:8px;padding:10px 18px;
+    font-size:14px;font-weight:800;cursor:pointer;letter-spacing:1px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;
+    flex-direction:column;align-items:center;gap:10px}
+  .cap{color:var(--inkSoft);font-size:12px;text-align:center}
+  .cap b{color:var(--ink);display:block;font-size:13px}
+  .stage{display:flex;align-items:center;justify-content:center;height:230px;width:100%;
+    background:
+      linear-gradient(45deg,#100d08 25%,transparent 25%) 0 0/16px 16px,
+      linear-gradient(-45deg,#100d08 25%,transparent 25%) 0 8px/16px 16px,
+      linear-gradient(45deg,transparent 75%,#100d08 75%) 8px -8px/16px 16px,
+      linear-gradient(-45deg,transparent 75%,#100d08 75%) -8px 0/16px 16px,#0c0a06;
+    border-radius:8px;overflow:hidden}
+  canvas{image-rendering:pixelated;border-radius:6px}
+  .stage.splash canvas{height:200px;width:auto;border-radius:4px}
+  .dl{background:#1d1810;color:var(--gold);border:1px solid var(--line);border-radius:6px;
+    padding:7px 14px;font-size:12.5px;cursor:pointer}
+  .dl:hover{border-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>字垣 · 品牌资产生成器</h1>
+  <p class="sub">指纹算法逐字移植自 <code>src/game/fingerprint.ts</code>；调色板取自 <code>BookmarkCard.tsx</code> / <code>config.ts</code>。</p>
+  <div class="note">
+    <b>用途：</b>本页用 canvas 按精确尺寸渲染全部品牌资产，点「下载」保存 PNG 到 <code>assets/</code>。<br>
+    <b>图标族</b>（icon / adaptive 前景·背景·单色 / favicon）已由 <code>node scripts/gen-brand-assets.js</code> 直接生成；本页可调整种子/角度/用时后<b>重新下载</b>换一种观感。<br>
+    <b>启动页 splash.png</b> 含中文（字垣 + 标语）必须在此页用浏览器字体渲染后下载。<br>
+    <b>生效：</b>改完 <code>app.json</code> 与 <code>assets/</code> 后，需 <code>expo prebuild</code> / EAS / <code>run:android</code> 重新构建；Expo Go 不会显示自定义图标/启动页。
+  </div>
+
+  <div class="controls">
+    <div class="ctrl-row">
+      <label>种子 <input id="seed" type="number" value="7" /></label>
+      <label>正解角度
+        <span class="seg" id="rotSeg">
+          <button data-r="0">0°</button><button data-r="90" class="on">90°</button>
+          <button data-r="180">180°</button><button data-r="270">270°</button>
+        </span>
+      </label>
+      <label>用时占比 <input id="ratio" type="range" min="0" max="1" step="0.01" value="0.62" />
+        <span id="ratioVal" style="color:var(--gold);min-width:34px">0.62</span></label>
+      <label><input id="pure" type="checkbox" checked /> 纯解徽章（绿）</label>
+      <button class="dlAll" id="dlAll">下载全部 → assets/</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+// ── 移植自 src/game/fingerprint.ts（逐字一致） ──
+function rotateMatrix(m, rotation){
+  const times=(((Math.floor(rotation/90)%4)+4)%4); let out=m;
+  for(let t=0;t<times;t++){
+    const rows=out.length; if(rows===0)break; const cols=out[0].length; const next=[];
+    for(let c=0;c<cols;c++){const row=[];for(let r=0;r<rows;r++)row.push(out[rows-1-r][c]);next.push(row);}
+    out=next;
+  } return out;
+}
+function cellHash(seed,r,c){
+  const x=(Math.imul(seed|0,374761393)^Math.imul(r+1,2654435761)^Math.imul(c+1,2246822519))>>>0;
+  return x%1000;
+}
+function buildFingerprint(input){
+  const cardHoles=input.cardHoles, cardSize=Math.max(3,input.cardSize), half=Math.floor(cardSize/2),
+    seed=input.seed|0, timeRatio=Math.max(0,Math.min(1,input.timeRatio));
+  const holeSet=new Set(cardHoles.map(h=>h.offsetX+","+h.offsetY));
+  const local=[];
+  for(let r=0;r<cardSize;r++){const row=[];
+    for(let c=0;c<cardSize;c++){
+      const dx=c-half,dy=r-half;
+      const isCorner=Math.abs(dx)===half&&Math.abs(dy)===half;
+      const isEdge=Math.abs(dx)===half||Math.abs(dy)===half;
+      const h=cellHash(seed,r,c)/1000;
+      if(holeSet.has(dx+","+dy))row.push("hole");
+      else if(isCorner)row.push(h>0.5?"body":"empty");
+      else if(isEdge)row.push(h>0.15?"body":"empty");
+      else row.push("body");
+    } local.push(row);
+  }
+  const rotated=rotateMatrix(local,input.solutionRotation), N=cardSize+2, grid=[];
+  for(let r=0;r<N;r++){const row=[];
+    for(let c=0;c<N;c++){
+      if(r>=1&&r<=cardSize&&c>=1&&c<=cardSize){
+        const v=rotated[r-1][c-1]; row.push(v==="hole"?"hole":v==="body"?"body":"bg");
+      } else row.push("bg");
+    } grid.push(row);
+  }
+  const place2x2=(r0,c0,type)=>{for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++)grid[r0+dr][c0+dc]=type;};
+  const corners=[[0,0],[0,N-2],[N-2,N-2],[N-2,0]];
+  const badgeIdx=(((Math.floor(input.solutionRotation/90)%4)+4)%4);
+  const badgeType=input.pureSolve?"badgePure":"badgeUsed";
+  for(let i=0;i<4;i++){const [r0,c0]=corners[i];place2x2(r0,c0,i===badgeIdx?badgeType:"finder");}
+  const ring=[];
+  for(let c=2;c<=N-3;c++)ring.push([0,c]);
+  for(let r=2;r<=N-3;r++)ring.push([r,N-1]);
+  for(let c=N-3;c>=2;c--)ring.push([N-1,c]);
+  for(let r=N-3;r>=2;r--)ring.push([r,0]);
+  const lit=Math.round(timeRatio*ring.length);
+  for(let i=0;i<lit&&i<ring.length;i++){const [r,c]=ring[i];grid[r][c]="frame";}
+  return {size:N,grid};
+}
+
+const ICON_HOLES=[
+  {offsetX:-3,offsetY:-2},{offsetX:-2,offsetY:2},{offsetX:0,offsetY:-3},{offsetX:3,offsetY:-1},
+  {offsetX:2,offsetY:3},{offsetX:-1,offsetY:3},{offsetX:-3,offsetY:1},{offsetX:1,offsetY:-1},
+];
+const COL={bg:"#14110A",body:"#2E2517",hole:"#4CAF50",finder:"#C8A96E",frame:"#C8A96E",badgePure:"#4CAF50",badgeUsed:"#C8824E"};
+
+function drawFingerprint(ctx,fp,W,H,margin,opts){
+  const {transparentBg,mono}=opts;
+  ctx.clearRect(0,0,W,H);
+  if(!transparentBg){ctx.fillStyle="#14110A";ctx.fillRect(0,0,W,H);}
+  const N=fp.size, block=W-2*margin, base=Math.max(1,Math.floor(block/N)), extra=block-base*N;
+  const span=i=>base+(i<extra?1:0); const off=[]; let acc=0;
+  for(let i=0;i<N;i++){off.push(acc);acc+=span(i);}
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const t=fp.grid[r][c]; let col;
+    if(t==="bg") col=transparentBg?null:"#14110A";
+    else if(mono) col="#FFFFFF";
+    else col=COL[t];
+    if(!col)continue;
+    ctx.fillStyle=col; ctx.fillRect(margin+off[c],margin+off[r],span(c),span(r));
+  }
+}
+function drawSolid(ctx,W,H,color){ctx.fillStyle=color;ctx.fillRect(0,0,W,H);}
+function drawSplash(ctx,W,H){
+  ctx.fillStyle="#14110A"; ctx.fillRect(0,0,W,H);
+  const cx=W/2, cy=H/2;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  // 字 垣（金色，两字带距）
+  ctx.fillStyle="#C8A96E";
+  ctx.font='900 168px "PingFang SC","Microsoft YaHei","SimHei",sans-serif';
+  ctx.fillText("字",cx-150,cy-60);
+  ctx.fillText("垣",cx+150,cy-60);
+  // 细金分隔
+  ctx.fillStyle="rgba(200,169,110,0.5)"; ctx.fillRect(cx-120,cy+70,240,1.5);
+  // 标语
+  ctx.fillStyle="#9C8B66";
+  ctx.font='500 50px "PingFang SC","Microsoft YaHei","SimHei",sans-serif';
+  ctx.fillText("万字为垣 · 一句结缘",cx,cy+150);
+}
+
+const ASSETS=[
+  {key:"icon",title:"icon.png",dim:"1024×1024",cls:"",render:(ctx,W,H,fp)=>drawFingerprint(ctx,fp,W,H,70,{transparentBg:false,mono:false})},
+  {key:"fg",title:"adaptive-icon-foreground.png",dim:"1024×1024",cls:"",render:(ctx,W,H,fp)=>drawFingerprint(ctx,fp,W,H,175,{transparentBg:true,mono:false})},
+  {key:"bg",title:"adaptive-icon-background.png",dim:"1024×1024",cls:"",render:(ctx,W,H)=>drawSolid(ctx,W,H,"#14110A")},
+  {key:"mono",title:"adaptive-icon-monochrome.png",dim:"1024×1024",cls:"",render:(ctx,W,H,fp)=>drawFingerprint(ctx,fp,W,H,175,{transparentBg:true,mono:true})},
+  {key:"favicon",title:"favicon.png",dim:"48×48",cls:"",render:(ctx,W,H,fp)=>drawFingerprint(ctx,fp,W,H,3,{transparentBg:false,mono:false})},
+  {key:"splash",title:"splash.png",dim:"1242×2436",cls:"splash",render:(ctx,W,H)=>drawSplash(ctx,W,H),noIcon:true},
+];
+const SIZES={icon:[1024,1024],fg:[1024,1024],bg:[1024,1024],mono:[1024,1024],favicon:[48,48],splash:[1242,2436]};
+
+const grid=document.getElementById("grid");
+const canvases={};
+ASSETS.forEach(a=>{
+  const [W,H]=SIZES[a.key];
+  const card=document.createElement("div"); card.className="card";
+  const stage=document.createElement("div"); stage.className="stage "+a.cls;
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  stage.appendChild(cv); canvases[a.key]={cv,W,H,asset:a};
+  const cap=document.createElement("div"); cap.className="cap"; cap.innerHTML="<b>"+a.title+"</b>"+a.dim;
+  const dl=document.createElement("button"); dl.className="dl"; dl.textContent="下载 PNG";
+  dl.onclick=()=>download(a.key);
+  card.appendChild(stage); card.appendChild(cap); card.appendChild(dl);
+  grid.appendChild(card);
+});
+
+function currentFingerprint(){
+  const seed=parseInt(document.getElementById("seed").value)||0;
+  const rot=parseInt(document.querySelector("#rotSeg button.on").dataset.r);
+  const ratio=parseFloat(document.getElementById("ratio").value);
+  const pure=document.getElementById("pure").checked;
+  return buildFingerprint({cardSize:9,cardHoles:ICON_HOLES,solutionRotation:rot,timeRatio:ratio,pureSolve:pure,seed});
+}
+function renderAll(){
+  const fp=currentFingerprint();
+  Object.values(canvases).forEach(({cv,W,H,asset})=>{
+    const ctx=cv.getContext("2d"); asset.render(ctx,W,H,fp);
+  });
+}
+function download(key){
+  const {cv,asset}=canvases[key];
+  const a=document.createElement("a");
+  a.download=asset.title; a.href=cv.toDataURL("image/png");
+  document.body.appendChild(a); a.click(); a.remove();
+}
+document.getElementById("dlAll").onclick=()=>ASSETS.forEach(a=>download(a.key));
+// controls
+document.getElementById("seed").addEventListener("input",renderAll);
+document.getElementById("ratio").addEventListener("input",e=>{
+  document.getElementById("ratioVal").textContent=parseFloat(e.target.value).toFixed(2); renderAll();
+});
+document.getElementById("pure").addEventListener("change",renderAll);
+document.querySelectorAll("#rotSeg button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#rotSeg button").forEach(x=>x.classList.remove("on"));
+  b.classList.add("on"); renderAll();
+});
+renderAll();
+</script>
+</body>
+</html>

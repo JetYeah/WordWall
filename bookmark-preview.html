@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>字垣 · 书签指纹预览（独立测试页）</title>
+<!--
+  独立测试工具 —— 脱离 App，在浏览器里直接预览「字垣」书签与指纹方块。
+  指纹算法逐字移植自 src/game/fingerprint.ts（buildFingerprint / rotateMatrix /
+  cellHash / synthesizeFingerprintInput）。若改了 TS 侧算法，请同步本页 <script> 内的移植。
+  双击即可打开，无需 npm / 构建。
+-->
+<style>
+  :root {
+    --cardBg: #14110A;
+    --panel:  #0A0906;
+    --gold:   #C8A96E;
+    --goldSoft: rgba(200,169,110,0.55);
+    --green:  #4CAF50;
+    --copper: #C8824E;
+    --body:   #2E2517;
+    --ink:    #F3E8D2;
+    --inkSoft:#9C8B66;
+    --inkFaint:#6B5E42;
+    --pageBg: #07060A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--pageBg); color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 22px; font-weight: 800; color: var(--gold); letter-spacing: 6px; margin: 0 0 6px; }
+  .sub { color: var(--inkSoft); font-size: 13px; margin-bottom: 4px; }
+  .note { color: var(--inkFaint); font-size: 12px; line-height: 1.7; margin: 10px 0 26px;
+    border-left: 2px solid var(--gold); padding: 8px 14px; background: rgba(200,169,110,0.04); }
+  .note b { color: var(--inkSoft); }
+
+  /* ── 控制面板 ── */
+  .controls { background: #110E16; border: 1px solid rgba(200,169,110,0.25); border-radius: 14px;
+    padding: 18px 18px 6px; margin-bottom: 26px; }
+  .ctrl-row { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin-bottom: 14px; }
+  .ctrl-row > label { font-size: 12px; color: var(--inkSoft); display: flex; align-items: center; gap: 8px; }
+  .seg { display: inline-flex; gap: 4px; }
+  .seg button { background: rgba(245,230,200,0.05); color: var(--ink); border: 1px solid rgba(245,230,200,0.12);
+    border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .seg button.on { background: var(--gold); color: #1A1612; border-color: var(--gold); font-weight: 700; }
+  select, input[type=number] { background: #0A0906; color: var(--ink); border: 1px solid rgba(200,169,110,0.3);
+    border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+  input[type=range] { width: 170px; accent-color: var(--gold); }
+  #timeLabel { color: var(--gold); font-variant-numeric: tabular-nums; min-width: 34px; }
+  .liveWrap { display: flex; justify-content: center; padding: 10px 0 4px; }
+
+  /* ── 画廊 ── */
+  section.gallery { margin-top: 30px; }
+  section.gallery > h2 { font-size: 15px; color: var(--gold); letter-spacing: 2px; font-weight: 700;
+    border-bottom: 1px solid rgba(200,169,110,0.18); padding-bottom: 8px; margin-bottom: 14px; }
+  .desc { color: var(--inkFaint); font-size: 12px; margin: -8px 0 14px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 18px; }
+  .cell-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cap { color: var(--inkSoft); font-size: 11px; text-align: center; max-width: 320px; line-height: 1.5; }
+  .cap b { color: var(--gold); }
+
+  /* ── 图例 ── */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 6px 0 0; font-size: 11px; color: var(--inkSoft); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+
+  /* ─── 卡片（移植自 BookmarkCard.tsx） ─── */
+  .card { position: relative; width: 320px; min-height: 480px; background: var(--cardBg);
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.35); }
+  .outer-frame { position: absolute; top: 9px; left: 9px; right: 9px; bottom: 9px;
+    border: 1.5px solid var(--gold); border-radius: 11px; }
+  .inner-frame { position: absolute; top: 14px; left: 14px; right: 14px; bottom: 14px;
+    border: 0.7px solid var(--goldSoft); border-radius: 7px; }
+  .inner { position: relative; z-index: 1; padding: 26px 30px; display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between; min-height: 480px; }
+  .header { display: flex; flex-direction: column; align-items: center; }
+  .seal { width: 30px; height: 30px; border-radius: 15px; border: 1.2px solid var(--gold);
+    background: rgba(200,169,110,0.10); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+  .brand { font-size: 22px; font-weight: 900; color: var(--gold); letter-spacing: 10px; padding-left: 10px; }
+  .tagline { font-size: 10px; color: var(--inkSoft); margin-top: 6px; letter-spacing: 3px; }
+  .fp-wrap { margin: 6px 0; }
+  .fp-panel { background: var(--panel); border-radius: 10px; padding: 8px;
+    border: 0.8px solid rgba(200,169,110,0.30); }
+  .fp-qz { padding: 3px; }
+  .fp-grid { display: grid; }
+  .cell { width: 16px; height: 16px; }
+  .quote-wrap { flex-grow: 1; display: flex; align-items: center; justify-content: center; margin-top: 10px; }
+  .quote { color: var(--green); font-weight: 700; text-align: center; line-height: 42px; letter-spacing: 2px; }
+  .meta-row { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; margin-top: 12px; gap: 4px; }
+  .author { font-size: 13px; color: var(--inkSoft); margin-right: 4px; }
+  .source { font-size: 13px; color: var(--inkSoft); font-style: italic; }
+  .status-bar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px;
+    margin-top: 14px; padding-top: 12px; border-top: 0.6px solid rgba(200,169,110,0.20); }
+  .st { font-size: 11px; color: var(--inkSoft); letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+  .dot { font-size: 11px; color: var(--inkFaint); }
+  .st-green { color: var(--green); font-weight: 700; }
+  .st-copper { color: var(--copper); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>字 垣 · 书签指纹预览</h1>
+  <div class="sub">独立测试页 —— 浏览器内直接调参 + 比对，验证指纹四要素</div>
+  <div class="note">
+    本页指纹算法逐字移植自 <b>src/game/fingerprint.ts</b>（<b>buildFingerprint / rotateMatrix / cellHash / synthesizeFingerprintInput</b>），与本页卡片样式移植自 <b>src/components/BookmarkCard.tsx</b>。
+    四要素：<b>① 卡片形状</b>（镂空排布）· <b>② 用时占比</b>（外圈顺时针点亮）· <b>③ 角度</b>（道具徽章按角度顺时针落位 TL→TR→BR→BL，内层亦整体旋转）· <b>④ 是否用道具</b>（徽章颜色：纯解=绿 / 道具=琥珀）。改了 TS 侧请同步本页 &lt;script&gt;。
+  </div>
+
+  <!-- ── 图例 ── -->
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--green)"></i>镂空(正解位)/纯解徽章</span>
+    <span><i class="swatch" style="background:var(--gold)"></i>定位符/计时框</span>
+    <span><i class="swatch" style="background:var(--copper)"></i>道具徽章</span>
+    <span><i class="swatch" style="background:var(--body)"></i>卡身实体</span>
+    <span><i class="swatch" style="background:transparent;border:1px solid #444"></i>背景(空)</span>
+  </div>
+
+  <!-- ── 交互式实时卡片 ── -->
+  <div class="controls">
+    <div class="ctrl-row">
+      <label>名言
+        <select id="quoteSel"></select>
+      </label>
+      <label>难度
+        <span class="seg" id="diffSeg">
+          <button data-v="easy">简单(卡7)</button>
+          <button data-v="medium" class="on">中等(卡9)</button>
+          <button data-v="hard">困难(卡11)</button>
+        </span>
+      </label>
+      <label>角度
+        <span class="seg" id="rotSeg">
+          <button data-v="0" class="on">0°</button>
+          <button data-v="90">90°</button>
+          <button data-v="180">180°</button>
+          <button data-v="270">270°</button>
+        </span>
+      </label>
+    </div>
+    <div class="ctrl-row">
+      <label>用时占比
+        <input id="timeRange" type="range" min="0" max="1" step="0.05" value="0.4" />
+        <span id="timeLabel">40%</span>
+      </label>
+      <label><input id="pureChk" type="checkbox" checked /> 纯解（否则右下=琥珀徽章）</label>
+      <label>种子
+        <input id="seedIn" type="number" value="12345" style="width:90px" />
+        <button id="seedRand" class="seg" style="background:rgba(200,169,110,0.14);color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer">随机</button>
+      </label>
+    </div>
+    <div class="liveWrap"><div id="liveCard"></div></div>
+  </div>
+
+  <!-- ── 画廊 A：四要素对照 ── -->
+  <section class="gallery">
+    <h2>A · 四要素对照（同一题，各变一项）</h2>
+    <div class="desc">基准 = 千里之行始于足下 / 中等 / 固定不对称镂空 / 种子 12345。每张只改一个要素，看指纹如何变。</div>
+    <div class="grid" id="galleryA"></div>
+  </section>
+
+  <!-- ── 画廊 B：旋转四态 ── -->
+  <section class="gallery">
+    <h2>B · 角度要素（同一镂空，0/90/180/270）</h2>
+    <div class="desc">道具徽章按角度顺时针落位 <b>TL(0°)→TR(90°)→BR(180°)→BL(270°)</b>，角度一目了然；内层镂空亦随之旋转。</div>
+    <div class="grid" id="galleryB"></div>
+  </section>
+
+  <!-- ── 画廊 C：用时渐变 ── -->
+  <section class="gallery">
+    <h2>C · 用时要素（外圈顺时针点亮）</h2>
+    <div class="desc">用时越多，外圈计时框（金）越满，沙漏意象。0% 全空 → 100% 整圈点亮（跳过四角定位符）。</div>
+    <div class="grid" id="galleryC"></div>
+  </section>
+
+  <!-- ── 画廊 D：纯解 vs 道具 ── -->
+  <section class="gallery">
+    <h2>D · 道具要素（右下徽章）</h2>
+    <div class="desc">纯解 → 右下徽章绿；用过道具 → 右下徽章琥珀。其余完全一致。</div>
+    <div class="grid" id="galleryD"></div>
+  </section>
+
+  <!-- ── 画廊 E：不同题目 ── -->
+  <section class="gallery">
+    <h2>E · 卡片形状要素（不同名言 → 不同镂空）</h2>
+    <div class="desc">镂空按名言字数 + 种子决定性散布（合成兜底路径，与老存档一致）。字数不同 → 镂空数/排布不同。</div>
+    <div class="grid" id="galleryE"></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+ * 指纹算法 —— 逐字移植自 src/game/fingerprint.ts（请保持同步）
+ * ============================================================ */
+
+function rotateMatrix(m, rotation) {
+  var times = (((Math.floor(rotation / 90) % 4) + 4) % 4);
+  var out = m;
+  for (var t = 0; t < times; t++) {
+    var rows = out.length;
+    if (rows === 0) break;
+    var cols = out[0].length;
+    var next = [];
+    for (var c = 0; c < cols; c++) {
+      var row = [];
+      for (var r = 0; r < rows; r++) row.push(out[rows - 1 - r][c]);
+      next.push(row);
+    }
+    out = next;
+  }
+  return out;
+}
+
+function cellHash(seed, r, c) {
+  var x = (Math.imul(seed | 0, 374761393)
+    ^ Math.imul(r + 1, 2654435761)
+    ^ Math.imul(c + 1, 2246822519)) >>> 0;
+  return x % 1000;
+}
+
+function buildFingerprint(input) {
+  var cardHoles = input.cardHoles;
+  var cardSize = Math.max(3, input.cardSize);
+  var half = Math.floor(cardSize / 2);
+  var seed = input.seed | 0;
+  var timeRatio = Math.max(0, Math.min(1, input.timeRatio));
+
+  var holeSet = {};
+  for (var i = 0; i < cardHoles.length; i++) holeSet[cardHoles[i].offsetX + ',' + cardHoles[i].offsetY] = true;
+
+  var local = [];
+  for (var r = 0; r < cardSize; r++) {
+    var row = [];
+    for (var c = 0; c < cardSize; c++) {
+      var dx = c - half;
+      var dy = r - half;
+      var isCorner = Math.abs(dx) === half && Math.abs(dy) === half;
+      var isEdge = Math.abs(dx) === half || Math.abs(dy) === half;
+      var h = cellHash(seed, r, c) / 1000;
+      if (holeSet[dx + ',' + dy]) row.push('hole');
+      else if (isCorner) row.push(h > 0.5 ? 'body' : 'empty');
+      else if (isEdge) row.push(h > 0.15 ? 'body' : 'empty');
+      else row.push('body');
+    }
+    local.push(row);
+  }
+
+  var rotated = rotateMatrix(local, input.solutionRotation);
+
+  var N = cardSize + 2;
+  var grid = [];
+  for (var r2 = 0; r2 < N; r2++) {
+    var row2 = [];
+    for (var c2 = 0; c2 < N; c2++) {
+      if (r2 >= 1 && r2 <= cardSize && c2 >= 1 && c2 <= cardSize) {
+        var v = rotated[r2 - 1][c2 - 1];
+        row2.push(v === 'hole' ? 'hole' : v === 'body' ? 'body' : 'bg');
+      } else {
+        row2.push('bg');
+      }
+    }
+    grid.push(row2);
+  }
+
+  function place2x2(r0, c0, type) {
+    for (var dr = 0; dr < 2; dr++)
+      for (var dc = 0; dc < 2; dc++) grid[r0 + dr][c0 + dc] = type;
+  }
+  // 顺时针四角 TL→TR→BR→BL；徽章落在与正解角度对应的角（位置=角度），其余三角为定位符
+  var corners = [[0, 0], [0, N - 2], [N - 2, N - 2], [N - 2, 0]];
+  var badgeIdx = (((Math.floor(input.solutionRotation / 90) % 4) + 4) % 4);
+  var badgeType = input.pureSolve ? 'badgePure' : 'badgeUsed';
+  for (var ci = 0; ci < 4; ci++) {
+    place2x2(corners[ci][0], corners[ci][1], ci === badgeIdx ? badgeType : 'finder');
+  }
+
+  var ring = [];
+  for (var c3 = 2; c3 <= N - 3; c3++) ring.push([0, c3]);
+  for (var r3 = 2; r3 <= N - 3; r3++) ring.push([r3, N - 1]);
+  for (var c4 = N - 3; c4 >= 2; c4--) ring.push([N - 1, c4]);
+  for (var r4 = N - 3; r4 >= 2; r4--) ring.push([r4, 0]);
+  var lit = Math.round(timeRatio * ring.length);
+  for (var i2 = 0; i2 < lit && i2 < ring.length; i2++) {
+    var rc = ring[i2];
+    grid[rc[0]][rc[1]] = 'frame';
+  }
+
+  return { size: N, grid: grid };
+}
+
+function synthesizeFingerprintInput(quote, difficulty, solutionRotation, timeRatio, pureSolve, seed) {
+  var cardSizeByDiff = { easy: 7, medium: 9, hard: 11 };
+  var cardSize = cardSizeByDiff[difficulty];
+  var half = Math.floor(cardSize / 2);
+  var range = Math.max(1, half - 1);
+  var holes = [];
+  var used = {};
+  var s = (seed | 0) || 1;
+  function rng() {
+    s = (s + 0x6D2B79F5) | 0;
+    var t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  var count = Math.min(quote.length || 4, range * range * 2);
+  var guard = 0;
+  while (holes.length < count && guard < 500) {
+    guard++;
+    var offsetX = Math.floor(rng() * (2 * range + 1)) - range;
+    var offsetY = Math.floor(rng() * (2 * range + 1)) - range;
+    var key = offsetX + ',' + offsetY;
+    if (!used[key]) { used[key] = true; holes.push({ offsetX: offsetX, offsetY: offsetY }); }
+  }
+  return { cardHoles: holes, cardSize: cardSize, solutionRotation: solutionRotation, timeRatio: timeRatio, pureSolve: pureSolve, seed: seed };
+}
+
+/* ============================================================
+ * 渲染（移植自 BookmarkCard.tsx 的视觉）
+ * ============================================================ */
+
+var COLORS = {
+  green: '#4CAF50', gold: '#C8A96E', copper: '#C8824E', body: '#2E2517',
+};
+var CELL_BG = {
+  hole: COLORS.green, finder: COLORS.gold, frame: COLORS.gold,
+  badgePure: COLORS.green, badgeUsed: COLORS.copper, body: COLORS.body, bg: 'transparent',
+};
+var DIFF = {
+  easy:   { label: '简单', cardSize: 7,  timeLimit: 180 },
+  medium: { label: '中等', cardSize: 9,  timeLimit: 240 },
+  hard:   { label: '困难', cardSize: 11, timeLimit: 300 },
+};
+var FINGERPRINT_PX = 208;
+var CUBE_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="' + COLORS.gold + '" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2 21 7 21 17 12 22 3 17 3 7Z"/><path d="M12 2 12 22"/><path d="M3 7 12 12 21 7"/></svg>';
+
+var QUOTES = [
+  { quote: '上善若水',           author: '老子',     source: '道德经' },
+  { quote: '千里之行始于足下',   author: '老子',     source: '道德经' },
+  { quote: '海纳百川有容乃大',   author: '林则徐',   source: '自题联' },
+  { quote: '宁为玉碎不为瓦全',   author: '李安节',   source: '北齐书' },
+  { quote: '学而时习之不亦说乎', author: '孔子',     source: '论语' },
+  { quote: '知者乐水仁者乐山',   author: '孔子',     source: '论语' },
+];
+
+// 固定不对称镂空（9 卡），用于 A/B/C/D 对照 —— 旋转可见
+var HOLES_9 = [
+  { offsetX: 0, offsetY: -3 }, { offsetX: 2, offsetY: -1 }, { offsetX: -2, offsetY: 0 },
+  { offsetX: 1, offsetY: 2 },  { offsetX: -1, offsetY: 3 }, { offsetX: 3, offsetY: 1 },
+  { offsetX: -3, offsetY: -2 },
+];
+
+function quoteFontSize(len) {
+  if (len <= 6) return 32;
+  if (len <= 9) return 28;
+  if (len <= 12) return 24;
+  return 20;
+}
+function formatDuration(totalSec) {
+  if (!isFinite(totalSec) || totalSec < 0) totalSec = 0;
+  var s = Math.floor(totalSec);
+  var h = Math.floor(s / 3600);
+  var m = Math.floor((s % 3600) / 60);
+  var sec = s % 60;
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  return m + ':' + String(sec).padStart(2, '0');
+}
+function prettyDate(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? m[1] + ' · ' + m[2] + ' · ' + m[3] : iso;
+}
+function todayIso() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function gridHTML(fp) {
+  var size = fp.size, grid = fp.grid;
+  var cellPx = Math.floor(FINGERPRINT_PX / size);
+  var cells = '';
+  for (var r = 0; r < size; r++) {
+    for (var c = 0; c < size; c++) {
+      var type = grid[r][c];
+      var bg = CELL_BG[type] || 'transparent';
+      var style = bg === 'transparent' ? '' : 'background:' + bg + ';';
+      cells += '<div class="cell" style="width:' + cellPx + 'px;height:' + cellPx + 'px;' + style + '"></div>';
+    }
+  }
+  return '<div class="fp-grid" style="grid-template-columns:repeat(' + size + ',' + cellPx + 'px);grid-template-rows:repeat(' + size + ',' + cellPx + 'px)">' + cells + '</div>';
+}
+
+// data: { quote, author, source, date, difficulty, timeSec, pureSolve, powerupsUsed,
+//         cardHoles?, cardSize?, solutionRotation, seed }
+function renderCardHTML(d) {
+  var diff = DIFF[d.difficulty];
+  var fs = quoteFontSize(d.quote.length);
+  var timeLimit = diff.timeLimit;
+  var ratio = timeLimit > 0 ? Math.max(0, Math.min(1, d.timeSec / timeLimit)) : 0;
+  var seed = d.seed | 0;
+  var fpInput = (d.cardHoles && d.cardHoles.length > 0 && d.cardSize)
+    ? { cardHoles: d.cardHoles, cardSize: d.cardSize, solutionRotation: d.solutionRotation,
+        timeRatio: ratio, pureSolve: d.pureSolve, seed: seed }
+    : synthesizeFingerprintInput(d.quote, d.difficulty, d.solutionRotation, ratio, d.pureSolve, seed);
+  var fp = buildFingerprint(fpInput);
+  var pureText = d.pureSolve ? '纯解' : ('道具×' + d.powerupsUsed);
+  var pureClass = d.pureSolve ? 'st-green' : 'st-copper';
+  return ''
+    + '<div class="card">'
+    +   '<div class="outer-frame"></div><div class="inner-frame"></div>'
+    +   '<div class="inner">'
+    +     '<div class="header">'
+    +       '<div class="seal">' + CUBE_SVG + '</div>'
+    +       '<div class="brand">字 垣</div>'
+    +       '<div class="tagline">万字为垣 · 一句结缘</div>'
+    +     '</div>'
+    +     '<div class="fp-wrap"><div class="fp-panel"><div class="fp-qz">' + gridHTML(fp) + '</div></div></div>'
+    +     '<div class="quote-wrap"><div class="quote" style="font-size:' + fs + 'px">' + d.quote + '</div></div>'
+    +     '<div class="meta-row"><span class="author">—— ' + d.author + '</span><span class="source">《' + d.source + '》</span></div>'
+    +     '<div class="status-bar">'
+    +       '<span class="st">' + prettyDate(d.date) + '</span><span class="dot">·</span>'
+    +       '<span class="st">' + diff.label + '</span><span class="dot">·</span>'
+    +       '<span class="st">' + formatDuration(d.timeSec) + '</span><span class="dot">·</span>'
+    +       '<span class="st ' + pureClass + '">' + pureText + '</span>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>';
+}
+
+function cardItem(html, caption) {
+  return '<div class="cell-item">' + html + '<div class="cap">' + caption + '</div></div>';
+}
+
+/* ============================================================
+ * 交互式实时卡片
+ * ============================================================ */
+var state = { quoteIdx: 1, difficulty: 'medium', rotation: 0, timeRatio: 0.4, pureSolve: true, seed: 12345 };
+
+function liveData() {
+  var q = QUOTES[state.quoteIdx];
+  var diff = DIFF[state.difficulty];
+  return {
+    quote: q.quote, author: q.author, source: q.source,
+    date: todayIso(), difficulty: state.difficulty,
+    timeSec: Math.round(state.timeRatio * diff.timeLimit),
+    pureSolve: state.pureSolve,
+    powerupsUsed: state.pureSolve ? 0 : 1,
+    solutionRotation: state.rotation, seed: state.seed,
+    // 不传 cardHoles → 走 synthesize（与「老存档兜底」一致，代表性镂空）
+  };
+}
+function rerenderLive() {
+  document.getElementById('liveCard').innerHTML = renderCardHTML(liveData());
+  document.getElementById('timeLabel').textContent = Math.round(state.timeRatio * 100) + '%';
+}
+
+function initControls() {
+  var sel = document.getElementById('quoteSel');
+  QUOTES.forEach(function (q, i) {
+    var o = document.createElement('option');
+    o.value = i; o.textContent = q.quote + ' — ' + q.author + '《' + q.source + '》';
+    sel.appendChild(o);
+  });
+  sel.value = state.quoteIdx;
+  sel.addEventListener('change', function () { state.quoteIdx = +sel.value; rerenderLive(); });
+
+  function bindSeg(id, key, cast) {
+    var seg = document.getElementById(id);
+    seg.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state[key] = cast(b.getAttribute('data-v'));
+        seg.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+        rerenderLive();
+      });
+    });
+  }
+  bindSeg('diffSeg', 'difficulty', String);
+  bindSeg('rotSeg', 'rotation', Number);
+
+  var tr = document.getElementById('timeRange');
+  tr.addEventListener('input', function () { state.timeRatio = +tr.value; rerenderLive(); });
+
+  var pc = document.getElementById('pureChk');
+  pc.addEventListener('change', function () { state.pureSolve = pc.checked; rerenderLive(); });
+
+  var si = document.getElementById('seedIn');
+  si.addEventListener('input', function () { state.seed = parseInt(si.value, 10) || 0; rerenderLive(); });
+  document.getElementById('seedRand').addEventListener('click', function () {
+    state.seed = Math.floor(Math.random() * 100000);
+    si.value = state.seed; rerenderLive();
+  });
+}
+
+/* ============================================================
+ * 画廊
+ * ============================================================ */
+function baseQuote() { return QUOTES[1]; } // 千里之行始于足下
+
+function renderGalleries() {
+  var q = baseQuote();
+  var date = todayIso();
+  var seed = 12345;
+
+  // A · 四要素对照（固定 HOLES_9 / 卡9）
+  var a = document.getElementById('galleryA');
+  a.innerHTML =
+    cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.3 * 240), pureSolve: true, powerupsUsed: 0, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 0, seed: seed }),
+      '<b>基准</b>：角度0° · 用时30% · 纯解') +
+    cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.3 * 240), pureSolve: true, powerupsUsed: 0, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 90, seed: seed }),
+      '<b>+角度</b>：改 90°（内层整体旋转）') +
+    cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.85 * 240), pureSolve: true, powerupsUsed: 0, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 0, seed: seed }),
+      '<b>+用时</b>：改 85%（外圈几乎点亮满）') +
+    cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.3 * 240), pureSolve: false, powerupsUsed: 2, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 0, seed: seed }),
+      '<b>+道具</b>：纯解→道具（右下徽章变琥珀）');
+
+  // B · 旋转四态
+  var b = document.getElementById('galleryB');
+  b.innerHTML = [0, 90, 180, 270].map(function (rot) {
+    return cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.4 * 240), pureSolve: true, powerupsUsed: 0, cardHoles: HOLES_9, cardSize: 9, solutionRotation: rot, seed: seed }),
+      '角度 <b>' + rot + '°</b>');
+  }).join('');
+
+  // C · 用时渐变
+  var cEl = document.getElementById('galleryC');
+  cEl.innerHTML = [0, 0.25, 0.5, 0.75, 1.0].map(function (ratio) {
+    return cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(ratio * 240), pureSolve: true, powerupsUsed: 0, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 0, seed: seed }),
+      '用时 <b>' + Math.round(ratio * 100) + '%</b>');
+  }).join('');
+
+  // D · 纯解 vs 道具
+  var dEl = document.getElementById('galleryD');
+  dEl.innerHTML =
+    cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.4 * 240), pureSolve: true, powerupsUsed: 0, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 0, seed: seed }),
+      '<b>纯解</b>（右下绿徽章）') +
+    cardItem(renderCardHTML({ quote: q.quote, author: q.author, source: q.source, date: date, difficulty: 'medium', timeSec: Math.round(0.4 * 240), pureSolve: false, powerupsUsed: 1, cardHoles: HOLES_9, cardSize: 9, solutionRotation: 0, seed: seed }),
+      '<b>用道具</b>（右下琥珀徽章）');
+
+  // E · 不同题目（合成镂空，统一中等卡9）
+  var eEl = document.getElementById('galleryE');
+  eEl.innerHTML = QUOTES.map(function (qq, i) {
+    return cardItem(renderCardHTML({ quote: qq.quote, author: qq.author, source: qq.source, date: date, difficulty: 'medium', timeSec: Math.round(0.5 * 240), pureSolve: true, powerupsUsed: 0, solutionRotation: 0, seed: 1000 + i * 7 }),
+      '<b>' + qq.quote + '</b>（' + qq.quote.length + ' 字 → ' + qq.quote.length + ' 镂空）');
+  }).join('');
+}
+
+/* ============================================================
+ * 启动
+ * ============================================================ */
+initControls();
+rerenderLive();
+renderGalleries();
+</script>
+</body>
+</html>

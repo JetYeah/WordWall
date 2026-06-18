@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>字垣 · 题库设计器</title>
+<style>
+  :root{
+    --bg:#0A0906; --panel:#14110A; --panel2:#1d1810; --ink:#F3E8D2; --inkSoft:#9C8B66; --inkFaint:#5d513c;
+    --gold:#C8A96E; --green:#4CAF50; --copper:#C8824E; --body:#2E2517; --line:#2a2114;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:13.5px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;}
+  .wrap{max-width:1280px;margin:0 auto;padding:26px 22px 100px}
+  h1{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:2px;margin:0 0 4px}
+  .sub{color:var(--inkSoft);margin:0 0 18px}
+  .note{color:var(--inkFaint);font-size:12.5px;line-height:1.8;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;padding:11px 14px;margin:0 0 22px}
+  .note b{color:var(--inkSoft)} .note code{color:var(--gold)}
+  .layout{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;color:var(--gold);margin:0 0 12px;letter-spacing:1px;font-weight:700}
+  label{display:block;font-size:12px;color:var(--inkSoft);margin:10px 0 4px}
+  input[type=text],input[type=number],select,textarea{width:100%;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit}
+  textarea{resize:vertical;min-height:96px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
+  .row{display:flex;gap:10px}
+  .row>div{flex:1}
+  button{background:var(--gold);color:#14110a;border:none;border-radius:8px;padding:9px 14px;font-size:13px;
+    font-weight:700;cursor:pointer;letter-spacing:.5px}
+  button.ghost{background:var(--panel2);color:var(--inkSoft);border:1px solid var(--line)}
+  .btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .seg{display:inline-flex;gap:4px;flex-wrap:wrap}
+  .seg button{background:var(--panel2);color:var(--inkSoft);border:1px solid var(--line);padding:7px 11px;font-weight:600}
+  .seg button.on{background:var(--gold);color:#14110a;border-color:var(--gold)}
+  .previews{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+  .pv{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px}
+  .pv .cap{color:var(--inkSoft);font-size:12px;text-align:center}
+  .pv .cap b{color:var(--ink);display:block;font-size:13px;margin-bottom:2px}
+  canvas{border-radius:6px;image-rendering:pixelated}
+  .info{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:4px;width:100%}
+  .info div{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;text-align:center}
+  .info .k{font-size:10.5px;color:var(--inkFaint);letter-spacing:1px}
+  .info .v{font-size:14px;color:var(--ink);font-weight:700;margin-top:2px}
+  .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px;max-height:260px;overflow:auto}
+  .gal button{background:var(--panel2);color:var(--inkSoft);border:1px solid var(--line);border-radius:8px;
+    padding:7px 8px;font-size:11.5px;font-weight:500;text-align:left;line-height:1.35;white-space:normal;min-height:42px}
+  .gal button:hover{border-color:var(--gold)}
+  .gal button b{color:var(--gold);display:block;font-size:10px;margin-bottom:2px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>字垣 · 题库设计器</h1>
+  <p class="sub">输入名言 → 实时预览卡片形状 / 字墙正解 / 指纹方块 → 复制 JSON 入题库。算法逐字移植自 <code>src/game/puzzleGenerator.ts</code> + <code>fingerprint.ts</code>。</p>
+  <div class="note">
+    <b>用法：</b>改「名言/作者/出处/分类/难度/种子」即时重算。点题库中任一条可载入试改。<b>加入题库：</b>复制下方 JSON，在 app 里开发者模式 → 题库管理 → 新增（或粘进 <code>PUZZLE_LIBRARY</code>）。
+    <br><b>难度映射</b>：4–6 字→简单(卡 7)/7–8 字→中等(卡 9)/9–11 字→困难(卡 11)。选「自动」按字数；可手动覆盖。
+  </div>
+
+  <div class="layout">
+    <!-- 控制面板 -->
+    <div class="card">
+      <h2>出题参数</h2>
+      <label>名言（4–11 字）</label>
+      <input id="quote" type="text" value="千里之行始于足下" />
+      <div class="row">
+        <div><label>作者</label><input id="author" type="text" value="老子" /></div>
+        <div><label>出处</label><input id="source" type="text" value="道德经" /></div>
+      </div>
+      <label>分类</label>
+      <select id="category">
+        <option>名人名言</option><option>诗词歌赋</option><option>书摘</option>
+      </select>
+      <label>难度</label>
+      <div class="seg" id="diffSeg">
+        <button data-d="auto" class="on">自动</button>
+        <button data-d="easy">简单</button><button data-d="medium">中等</button><button data-d="hard">困难</button>
+      </div>
+      <label>布局种子（改它换镂空/位置/角度）</label>
+      <div class="row">
+        <div><input id="seed" type="number" value="1" /></div>
+        <div><input id="screen" type="text" value="390×844" /></div>
+      </div>
+      <div class="btns">
+        <button id="reseed">🎲 重新生成</button>
+        <button class="ghost" id="copy">复制 JSON</button>
+      </div>
+
+      <h2 style="margin-top:18px">JSON 输出</h2>
+      <textarea id="json" readonly></textarea>
+
+      <h2 style="margin-top:18px">题库（43 条内置）</h2>
+      <div class="gal" id="gal"></div>
+    </div>
+
+    <!-- 预览 -->
+    <div class="previews" id="previews">
+      <div class="pv">
+        <div class="cap"><b>指纹方块</b>完成时书签/日历的签名图案</div>
+        <canvas id="fp" width="208" height="208"></canvas>
+      </div>
+      <div class="pv">
+        <div class="cap"><b>解密卡（镂空形状）</b>正解角度下的卡面</div>
+        <canvas id="card" width="240" height="240"></canvas>
+      </div>
+      <div class="pv">
+        <div class="cap"><b>字墙 · 正解</b>绿格 = 正解透字位</div>
+        <canvas id="wall" width="360" height="440"></canvas>
+      </div>
+      <div class="pv" style="grid-column:1/-1">
+        <div class="cap"><b>布局信息</b></div>
+        <div class="info" id="info"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 移植自 src/game/puzzleGenerator.ts / engine.ts / fingerprint.ts（逐字一致） ──
+function hashCode(s){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return h;}
+function mulberry32(seed){return()=>{seed|=0;seed=(seed+0x6D2B79F5)|0;let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
+function rotateOffset(o,rot){switch(((rot%360)+360)%360){case 0:return{x:o.x,y:o.y};case 90:return{x:-o.y,y:o.x};case 180:return{x:-o.x,y:-o.y};case 270:return{x:o.y,y:-o.x};default:return o;}}
+
+const DIFFICULTY_CONFIGS={
+  easy:{label:'简单',quoteLenMin:4,quoteLenMax:6,coreWidthRatio:0.5,coreHeightRatio:0.45,cardSize:7,holeSpread:0.55,timeLimitSec:180},
+  medium:{label:'中等',quoteLenMin:7,quoteLenMax:8,coreWidthRatio:0.6,coreHeightRatio:0.55,cardSize:9,holeSpread:0.8,timeLimitSec:240},
+  hard:{label:'困难',quoteLenMin:9,quoteLenMax:11,coreWidthRatio:0.85,coreHeightRatio:0.65,cardSize:11,holeSpread:1.0,timeLimitSec:300,maximizeCore:true},
+};
+function pickDifficultyForQuote(len){for(const d of ['easy','medium','hard']){const c=DIFFICULTY_CONFIGS[d];if(len>=c.quoteLenMin&&len<=c.quoteLenMax)return d;}return 'medium';}
+
+const FILLER_CHARS='天地人和风雨山水花鸟鱼虫日月星辰春夏秋冬东西南北金木火土心性情意道法自然命运生死爱恨喜怒哀乐福禄寿喜财宝器物诗文书画琴棋酒茶梦觉幻真光明暗影黑白红黄蓝绿大小高低远近深浅快慢强弱新旧美善德信忠孝礼义廉耻勇智仁慧思学问道术器用功夫力能力行止进退取舍成败得失有无虚实动静升降开合收放藏露隐现浮沉山川湖海江河溪泉峰谷岩崖松竹梅兰菊荷桃柳笔墨纸砚碑帖印篆楷行草隶画诗词曲赋歌吟诵读讲论辩议思考察观听视望顾回顾返往来进出入归去留';
+
+const TOP_RESERVE_PX=108, BOTTOM_RESERVE_PX=198, CELL_SIZE=28, MIN_CELL_SIZE=20, TARGET_COLS=18;
+function computeCellSize(sw){return Math.max(MIN_CELL_SIZE,Math.min(CELL_SIZE,Math.floor(sw/TARGET_COLS)));}
+function clampInt(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+function computeCoreAreaCells(gridCols,gridRows,config,sw,sh,cellSize){
+  const minCC=config.cardSize+2, minCR=config.cardSize+2, max=!!config.maximizeCore;
+  const marginCap=gridCols-2, ratioCols=Math.floor((sw*config.coreWidthRatio)/cellSize);
+  let cc=max?Math.max(minCC,marginCap):Math.max(minCC,ratioCols); cc=Math.min(cc,gridCols);
+  if(((gridCols-cc)%2+2)%2!==0){const d=cc-1; cc=(d>=minCC&&d<=gridCols)?d:Math.min(gridCols,cc+1);}
+  const bt=clampInt(Math.ceil(TOP_RESERVE_PX/cellSize),0,gridRows-1);
+  const bb=clampInt(Math.floor((sh-BOTTOM_RESERVE_PX)/cellSize),bt,gridRows-1);
+  const band=bb-bt+1, ratioRows=Math.floor((sh*config.coreHeightRatio)/cellSize);
+  let cr=max?Math.max(minCR,band):Math.max(minCR,Math.min(band,ratioRows)); cr=Math.min(cr,gridRows);
+  const col0=Math.max(0,Math.floor((gridCols-cc)/2));
+  const row0=clampInt(bt+Math.floor((band-cr)/2),0,gridRows-cr);
+  return {col0,row0,col1:col0+cc-1,row1:row0+cr-1};
+}
+function generateCardHoles(qLen,cardSize,spread,rng){
+  const holes=[],half=Math.floor(cardSize/2),range=Math.max(1,Math.min(half-1,Math.floor(half*spread))),used=new Set();
+  for(let i=0;i<qLen;i++){let a=0;while(a<200){const x=Math.floor(rng()*(2*range+1))-range,y=Math.floor(rng()*(2*range+1))-range,k=x+','+y;if(!used.has(k)){used.add(k);holes.push({x,y});break;}a++;}}
+  return holes;
+}
+function generateGrid(rows,cols,quote,holes,solCol,solRow,solRot,rng,depth){
+  depth=depth||0;const g=[];for(let r=0;r<rows;r++){g[r]=[];for(let c=0;c<cols;c++)g[r][c]=FILLER_CHARS[Math.floor(rng()*FILLER_CHARS.length)];}
+  for(let i=0;i<holes.length;i++){const ro=rotateOffset(holes[i],solRot),row=solRow+ro.y,col=solCol+ro.x;if(row>=0&&row<rows&&col>=0&&col<cols)g[row][col]=quote[i];}
+  for(const rot of [0,90,180,270]){if(rot===solRot)continue;const ch=holes.map(h=>{const r=rotateOffset(h,rot);const row=solRow+r.y,col=solCol+r.x;return(row>=0&&row<rows&&col>=0&&col<cols)?g[row][col]:'';});if(ch.join('')===quote){if(depth<50)return generateGrid(rows,cols,quote,holes,solCol,solRow,solRot,rng,depth+1);return g;}}
+  return g;
+}
+function generatePuzzleFromQuote(puzzle,config,coreArea,gridCols,gridRows,cellSize,rng){
+  const qLen=puzzle.quote.length,cardSize=config.cardSize;
+  const holes=generateCardHoles(qLen,cardSize,config.holeSpread,rng);
+  const half=Math.floor(cardSize/2);
+  const minC=Math.max(0,coreArea.col0+half),maxC=Math.min(gridCols-1,coreArea.col1-half);
+  const minR=Math.max(0,coreArea.row0+half),maxR=Math.min(gridRows-1,coreArea.row1-half);
+  const spanC=Math.max(1,maxC-minC+1),spanR=Math.max(1,maxR-minR+1);
+  const solCol=minC+Math.floor(rng()*spanC),solRow=minR+Math.floor(rng()*spanR);
+  const rotations=[0,90,180,270],solRot=rotations[Math.floor(rng()*rotations.length)];
+  const holesSorted=[...holes].sort((a,b)=>{const ra=rotateOffset(a,solRot),rb=rotateOffset(b,solRot);return ra.y!==rb.y?ra.y-rb.y:ra.x-rb.x;});
+  const grid=generateGrid(gridRows,gridCols,puzzle.quote,holesSorted,solCol,solRow,solRot,rng);
+  return {puzzle,layout:{grid,gridRows,gridCols,cardShape:{size:cardSize,holes:holesSorted},solutionPosition:{col:solCol,row:solRow},solutionRotation:solRot,coreArea,cellSize}};
+}
+// fingerprint
+function rotateMatrix(m,rotation){const times=(((Math.floor(rotation/90)%4)+4)%4);let out=m;for(let t=0;t<times;t++){const rows=out.length;if(rows===0)break;const cols=out[0].length,next=[];for(let c=0;c<cols;c++){const row=[];for(let r=0;r<rows;r++)row.push(out[rows-1-r][c]);next.push(row);}out=next;}return out;}
+function cellHash(seed,r,c){const x=(Math.imul(seed|0,374761393)^Math.imul(r+1,2654435761)^Math.imul(c+1,2246822519))>>>0;return x%1000;}
+function buildFingerprint(input){
+  const cardSize=Math.max(3,input.cardSize),half=Math.floor(cardSize/2),seed=input.seed|0,tr=Math.max(0,Math.min(1,input.timeRatio));
+  const holeSet=new Set(input.cardHoles.map(h=>h.x+','+h.y)),local=[];
+  for(let r=0;r<cardSize;r++){const row=[];for(let c=0;c<cardSize;c++){const dx=c-half,dy=r-half,ic=Math.abs(dx)===half&&Math.abs(dy)===half,ie=Math.abs(dx)===half||Math.abs(dy)===half,h=cellHash(seed,r,c)/1000;if(holeSet.has(dx+','+dy))row.push('hole');else if(ic)row.push(h>0.5?'body':'empty');else if(ie)row.push(h>0.15?'body':'empty');else row.push('body');}local.push(row);}
+  const rot=rotateMatrix(local,input.solutionRotation),N=cardSize+2,grid=[];
+  for(let r=0;r<N;r++){const row=[];for(let c=0;c<N;c++){if(r>=1&&r<=cardSize&&c>=1&&c<=cardSize){const v=rot[r-1][c-1];row.push(v==='hole'?'hole':v==='body'?'body':'bg');}else row.push('bg');}grid.push(row);}
+  const p2=(r0,c0,t)=>{for(let dr=0;dr<2;dr++)for(let dc=0;dc<2;dc++)grid[r0+dr][c0+dc]=t;};
+  const corners=[[0,0],[0,N-2],[N-2,N-2],[N-2,0]],bi=(((Math.floor(input.solutionRotation/90)%4)+4)%4),bt=input.pureSolve?'badgePure':'badgeUsed';
+  for(let i=0;i<4;i++){const[r0,c0]=corners[i];p2(r0,c0,i===bi?bt:'finder');}
+  const ring=[];for(let c=2;c<=N-3;c++)ring.push([0,c]);for(let r=2;r<=N-3;r++)ring.push([r,N-1]);for(let c=N-3;c>=2;c--)ring.push([N-1,c]);for(let r=N-3;r>=2;r--)ring.push([r,0]);
+  const lit=Math.round(tr*ring.length);for(let i=0;i<lit&&i<ring.length;i++){const[r,c]=ring[i];grid[r][c]='frame';}
+  return {size:N,grid};
+}
+
+// ── 题库（移植 PUZZLE_LIBRARY） ──
+const PUZZLE_LIBRARY=[
+  {id:'q01',quote:'千里之行始于足下',author:'老子',source:'道德经',category:'名人名言'},
+  {id:'q02',quote:'温故而知新',author:'孔子',source:'论语',category:'名人名言'},
+  {id:'q03',quote:'知己知彼百战不殆',author:'孙子',source:'孙子兵法',category:'名人名言'},
+  {id:'q04',quote:'志当存高远',author:'诸葛亮',source:'诫外生书',category:'名人名言'},
+  {id:'q05',quote:'业精于勤荒于嬉',author:'韩愈',source:'进学解',category:'名人名言'},
+  {id:'q06',quote:'锲而不舍金石可镂',author:'荀子',source:'劝学',category:'名人名言'},
+  {id:'q07',quote:'上善若水',author:'老子',source:'道德经',category:'名人名言'},
+  {id:'q08',quote:'厚德载物',author:'周文王',source:'周易',category:'名人名言'},
+  {id:'q09',quote:'天道酬勤',author:'古语',source:'尚书',category:'名人名言'},
+  {id:'q10',quote:'宁静致远',author:'诸葛亮',source:'诫子书',category:'名人名言'},
+  {id:'q11',quote:'大智若愚',author:'老子',source:'道德经',category:'名人名言'},
+  {id:'q12',quote:'学而不厌诲人不倦',author:'孔子',source:'论语',category:'名人名言'},
+  {id:'q13',quote:'敏而好学不耻下问',author:'孔子',source:'论语',category:'名人名言'},
+  {id:'q14',quote:'己所不欲勿施于人',author:'孔子',source:'论语',category:'名人名言'},
+  {id:'q15',quote:'三人行必有我师',author:'孔子',source:'论语',category:'名人名言'},
+  {id:'q16',quote:'人无远虑必有近忧',author:'孔子',source:'论语',category:'名人名言'},
+  {id:'q17',quote:'生于忧患死于安乐',author:'孟子',source:'孟子',category:'名人名言'},
+  {id:'q18',quote:'水至清则无鱼',author:'班固',source:'汉书',category:'名人名言'},
+  {id:'q19',quote:'路漫漫其修远兮',author:'屈原',source:'离骚',category:'名人名言'},
+  {id:'q20',quote:'天行健君子以自强不息',author:'周文王',source:'周易',category:'名人名言'},
+  {id:'p01',quote:'床前明月光',author:'李白',source:'静夜思',category:'诗词歌赋'},
+  {id:'p02',quote:'春眠不觉晓',author:'孟浩然',source:'春晓',category:'诗词歌赋'},
+  {id:'p03',quote:'白日依山尽',author:'王之涣',source:'登鹳雀楼',category:'诗词歌赋'},
+  {id:'p04',quote:'海上生明月',author:'张九龄',source:'望月怀远',category:'诗词歌赋'},
+  {id:'p05',quote:'红豆生南国',author:'王维',source:'相思',category:'诗词歌赋'},
+  {id:'p06',quote:'人面桃花相映红',author:'崔护',source:'题都城南庄',category:'诗词歌赋'},
+  {id:'p07',quote:'山重水复疑无路',author:'陆游',source:'游山西村',category:'诗词歌赋'},
+  {id:'p08',quote:'柳暗花明又一村',author:'陆游',source:'游山西村',category:'诗词歌赋'},
+  {id:'p09',quote:'不识庐山真面目',author:'苏轼',source:'题西林壁',category:'诗词歌赋'},
+  {id:'p10',quote:'飞流直下三千尺',author:'李白',source:'望庐山瀑布',category:'诗词歌赋'},
+  {id:'p11',quote:'独在异乡为异客',author:'王维',source:'九月九日忆山东兄弟',category:'诗词歌赋'},
+  {id:'p12',quote:'举头望明月低头思故乡',author:'李白',source:'静夜思',category:'诗词歌赋'},
+  {id:'p13',quote:'大漠孤烟直长河落日圆',author:'王维',source:'使至塞上',category:'诗词歌赋'},
+  {id:'p14',quote:'停车坐爱枫林晚',author:'杜牧',source:'山行',category:'诗词歌赋'},
+  {id:'p15',quote:'春风又绿江南岸',author:'王安石',source:'泊船瓜洲',category:'诗词歌赋'},
+  {id:'p16',quote:'千山鸟飞绝万径人踪灭',author:'柳宗元',source:'江雪',category:'诗词歌赋'},
+  {id:'p17',quote:'接天莲叶无穷碧',author:'杨万里',source:'晓出净慈寺',category:'诗词歌赋'},
+  {id:'p18',quote:'姑苏城外寒山寺',author:'张继',source:'枫桥夜泊',category:'诗词歌赋'},
+  {id:'b01',quote:'一个人可以被毁灭',author:'海明威',source:'老人与海',category:'书摘'},
+  {id:'b02',quote:'为你千千万万遍',author:'胡赛尼',source:'追风筝的人',category:'书摘'},
+  {id:'b03',quote:'人间不值得但你值得',author:'李诞',source:'笑场',category:'书摘'},
+  {id:'b04',quote:'世上有两样东西不可直视',author:'东野圭吾',source:'白夜行',category:'书摘'},
+  {id:'b05',quote:'从前的日色变得慢',author:'木心',source:'从前慢',category:'书摘'},
+];
+
+// ── 调色板（移植 BookmarkCard / config） ──
+const COL={bg:'#14110A',body:'#2E2517',hole:'#4CAF50',finder:'#C8A96E',frame:'#C8A96E',badgePure:'#4CAF50',badgeUsed:'#C8824E'};
+const WALL=['#3D2B1F','#4A3728','#5C4033','#6B4423'];
+
+// ── DOM ──
+const $=id=>document.getElementById(id);
+const dpr=window.devicePixelRatio||1;
+function setupCanvas(cv,w,h){cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+'px';cv.style.height=h+'px';const cx=cv.getContext('2d');cx.scale(dpr,dpr);return cx;}
+
+// 指纹方块（物理像素对齐版，与 RN FingerprintGrid v7 一致）
+function drawFingerprint(ctx,fp,W){
+  const N=fp.size,phys=Math.round(W*dpr),insetPhys=Math.max(1,Math.round(dpr));
+  const inner=Math.max(N,phys-insetPhys*2),base=Math.max(1,Math.floor(inner/N)),extra=inner-base*N;
+  const ps=i=>base+(i<extra?1:0),po=[];let a=0;for(let i=0;i<N;i++){po.push(a);a+=ps(i);}
+  const lay=p=>p/dpr;
+  ctx.clearRect(0,0,W,W);
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const t=fp.grid[r][c];if(t==='bg')continue;ctx.fillStyle=COL[t]||COL.body;ctx.fillRect(lay(insetPhys+po[c]),lay(insetPhys+po[r]),lay(ps(c)),lay(ps(r)));}
+}
+// 解密卡（镂空形状，正解角度）
+function drawCard(ctx,layout,W){
+  const {size,holes}=layout.cardShape,solRot=layout.solutionRotation,N=size;
+  const cell=Math.floor((W-16)/N),off=(W-cell*N)/2;
+  ctx.clearRect(0,0,W,W);
+  // 卡身（按 mask 风格：四角/边缘随机镂空 → 这里用 holes + 简化轮廓）
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const dx=c-Math.floor(N/2),dy=r-Math.floor(N/2);
+    const isHole=holes.some(h=>{const ro=rotateOffset(h,solRot);return ro.x===dx&&ro.y===dy;});
+    ctx.fillStyle=isHole?'#0A0906':COL.body;
+    if(!isHole){ctx.fillRect(off+c*cell+1,off+r*cell+1,cell-1,cell-1);}
+    else{ctx.fillStyle=COL.hole;ctx.fillRect(off+c*cell+2,off+r*cell+2,cell-3,cell-3);}
+  }
+}
+// 字墙（正解绿格高亮）
+function drawWall(ctx,layout,W,H){
+  const {grid,gridRows,gridCols,cardShape,solutionPosition,solutionRotation}=layout;
+  const cell=Math.min(Math.floor(W/gridCols),Math.floor(H/gridRows));
+  const w=cell*gridCols,h=cell*gridRows,ox=(W-w)/2,oy=(H-h)/2;
+  ctx.clearRect(0,0,W,H);
+  ctx.font=(cell-3)+'px "PingFang SC","Microsoft YaHei",serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  // 正解 cell 集合（正解角度下镂空落位）
+  const solCells=new Set();
+  for(const h of cardShape.holes){const ro=rotateOffset(h,solutionRotation);solCells.add((solutionPosition.row+ro.y)+','+(solutionPosition.col+ro.x));}
+  for(let r=0;r<gridRows;r++)for(let c=0;c<gridCols;c++){
+    const ch=grid[r][c],isSol=solCells.has(r+','+c);
+    ctx.fillStyle=isSol?'rgba(76,175,80,0.22)':'rgba(245,230,200,0.05)';
+    ctx.fillRect(ox+c*cell,oy+r*cell,cell,cell);
+    ctx.fillStyle=isSol?COL.hole:WALL[(r*7+c*3)%WALL.length];
+    ctx.globalAlpha=isSol?1:0.5;
+    ctx.fillText(ch,ox+c*cell+cell/2,oy+r*cell+cell/2);
+  }
+  ctx.globalAlpha=1;
+}
+
+function regen(){
+  const quote=$('quote').value.trim();
+  const author=$('author').value.trim()||'佚名';
+  const source=$('source').value.trim()||'佚名';
+  const category=$('category').value;
+  const diffSel=$('diffSeg').querySelector('.on').dataset.d;
+  if(quote.length<4||quote.length>11){$('json').value='// 名言需 4–11 字（当前 '+quote.length+' 字）';return;}
+  const difficulty=diffSel==='auto'?pickDifficultyForQuote(quote.length):diffSel;
+  const config=DIFFICULTY_CONFIGS[difficulty];
+  const [sw,sh]=$('screen').value.split('×').map(Number);
+  const seed=Math.abs(hashCode(($('seed').value||'1')))||1;
+  const cellSize=computeCellSize(sw),gridCols=Math.floor(sw/cellSize),gridRows=Math.floor(sh/cellSize);
+  const coreArea=computeCoreAreaCells(gridCols,gridRows,config,sw,sh,cellSize);
+  const puzzle={id:'c'+Math.abs(hashCode(quote)).toString(36),quote,author,source,category};
+  const {layout}=generatePuzzleFromQuote(puzzle,config,coreArea,gridCols,gridRows,cellSize,mulberry32(seed+12345));
+  // 指纹输入
+  const fp=buildFingerprint({cardHoles:layout.cardShape.holes,cardSize:layout.cardShape.size,solutionRotation:layout.solutionRotation,timeRatio:0.62,pureSolve:true,seed});
+  drawFingerprint(setupCanvas($('fp'),208,208),fp,208);
+  drawCard(setupCanvas($('card'),240,240),layout,240);
+  drawWall(setupCanvas($('wall'),360,440),layout,360,440);
+  // 信息
+  const sol=layout.solutionPosition;
+  $('info').innerHTML=[
+    ['难度',config.label],['卡片',layout.cardShape.size+'×'+layout.cardShape.size],
+    ['字数',quote.length+' 字'],['正解位置','('+sol.col+', '+sol.row+')'],
+    ['正解角度',layout.solutionRotation+'°'],['网格',gridCols+' × '+gridRows],
+  ].map(([k,v])=>'<div><div class="k">'+k+'</div><div class="v">'+v+'</div></div>').join('');
+  // JSON（内置库格式）
+  const id=quote.length?("'"+('c'+Math.abs(hashCode(quote)).toString(36))+"'"):"''";
+  $('json').value=
+"{ id: "+id+", quote: '"+quote+"', author: '"+author+"', source: '"+source+"', category: '"+category+"' },";
+}
+function bindInputs(){['quote','author','source','category','seed','screen'].forEach(id=>$(id).addEventListener('input',regen));}
+$('diffSeg').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('diffSeg').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');regen();});
+$('reseed').onclick=()=>{$('seed').value=Math.floor(Math.random()*99999)+1;regen();};
+$('copy').onclick=()=>{navigator.clipboard.writeText($('json').value);$('copy').textContent='已复制 ✓';setTimeout(()=>$('copy').textContent='复制 JSON',1200);};
+// 题库画廊
+$('gal').innerHTML=PUZZLE_LIBRARY.map(p=>'<button data-id="'+p.id+'"><b>'+p.category+' · '+p.quote.length+'字</b>'+p.quote+'<br><span style="color:var(--inkFaint);font-size:10px">—— '+p.author+'《'+p.source+'》</span></button>').join('');
+$('gal').querySelectorAll('button').forEach(b=>b.onclick=()=>{const p=PUZZLE_LIBRARY.find(x=>x.id===b.dataset.id);$('quote').value=p.quote;$('author').value=p.author;$('source').value=p.source;$('category').value=p.category;regen();window.scrollTo({top:0,behavior:'smooth'});});
+bindInputs();regen();
+</script>
+</body>
+</html>
