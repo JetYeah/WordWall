@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>字垣 · 叠嶂 错落立方体堆 预览 v3</title>
+<style>
+  :root{--bg:#1A1612;--paper:#F5E6C8;--accent:#4A90D9;--muted:#8a7a55;}
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--paper);overflow:hidden;touch-action:none;font-family:"PingFang SC","Microsoft YaHei",sans-serif;}
+  #stage{position:fixed;inset:0;} canvas{display:block;}
+  .hud{position:fixed;left:0;right:0;top:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;z-index:5;}
+  .hud .title{font-weight:700;letter-spacing:2px;font-size:15px;} .hud .meta{color:var(--muted);font-size:12px;}
+  .facechip{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 1px;background:#3a3320;vertical-align:middle;}
+  .facechip.on{background:var(--accent);} .facechip.sol{box-shadow:0 0 0 2px #4CAF50;}
+  .hint{position:fixed;left:0;right:0;bottom:16px;text-align:center;color:var(--muted);font-size:12px;z-index:5;}
+  .err{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:9;text-align:center;padding:24px;}
+  .err h2{color:#FF6B6B;margin:0 0 8px;} .err button{margin-top:14px;padding:10px 22px;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:10px;font-size:14px;}
+  .loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:8;color:var(--muted);font-size:13px;letter-spacing:2px;}
+</style>
+</head>
+<body>
+  <div class="hud"><span class="title">叠嶂 · 错落立方体堆 v3</span><span class="meta" id="meta">载入中…</span></div>
+  <div id="stage"></div>
+  <div class="hint" id="hint">拖动 360° 旋转 · 松手吸附 → 自动摊平成字幕墙 · 点墙返回旋转</div>
+  <div class="loading" id="loading">正在加载 3D 资源…</div>
+  <div class="err" id="err"><h2>3D 资源加载失败</h2><p style="color:var(--muted);font-size:13px">three.js CDN 全部不可达（需联网首次加载）。</p><button onclick="location.reload()">重试</button></div>
+
+<script>
+function loadThree(onReady,onErr){
+  var urls=['https://cdn.bootcdn.net/ajax/libs/three.js/r128/three.min.js','https://cdn.staticfile.org/three.js/r128/three.min.js','https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'];
+  var i=0; function tryNext(){ if(i>=urls.length){onErr();return;} var s=document.createElement('script'); s.src=urls[i++]; s.onload=onReady; s.onerror=tryNext; document.head.appendChild(s);} tryNext();
+}
+loadThree(init,function(){document.getElementById('loading').style.display='none';document.getElementById('err').style.display='flex';});
+
+var N=8, CELL=36, HALF=N*CELL/2;
+var FILLER='的一是在了不和有大这中人为上个我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很知者';
+var QUOTE='千里之行始于足下', SOL_FACE=0;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function pickFiller(rng){return FILLER[(rng()*FILLER.length)|0];}
+function buildFace(rng,isSol){var g=[];for(var r=0;r<N;r++){var row=[];for(var c=0;c<N;c++)row.push(pickFiller(rng));g.push(row);} if(isSol){var sr=(N/2)|0,sc=((N-QUOTE.length)/2)|0;for(var k=0;k<QUOTE.length;k++)g[sr][sc+k]=QUOTE[k];} return g;}
+
+function buildAtlas(){
+  var set={};for(var i=0;i<FILLER.length;i++)set[FILLER[i]]=1;for(var j=0;j<QUOTE.length;j++)set[QUOTE[j]]=1;
+  var chars=Object.keys(set),COLS_A=16,ROWS_A=Math.ceil(chars.length/COLS_A),CA=96;
+  var cv=document.createElement('canvas');cv.width=COLS_A*CA;cv.height=ROWS_A*CA;
+  var ctx=cv.getContext('2d');ctx.fillStyle='#F5E6C8';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.font='bold 64px "PingFang SC","Microsoft YaHei",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#3D2B1F';
+  var map={};chars.forEach(function(ch,idx){var ax=idx%COLS_A,ay=(idx/COLS_A)|0;ctx.fillText(ch,ax*CA+CA/2,ay*CA+CA/2);map[ch]={u0:ax/COLS_A,u1:(ax+1)/COLS_A,v0:1-(ay+1)/ROWS_A,v1:1-ay/ROWS_A};});
+  return {canvas:cv,map:map};
+}
+function makeGeo(size,chars6,map){
+  var g=new THREE.BoxGeometry(size,size,size),uv=g.attributes.uv;
+  for(var f=0;f<6;f++){var r=map[chars6[f]]||map[FILLER[0]],b=f*4;uv.setXY(b+0,r.u0,r.v1);uv.setXY(b+1,r.u1,r.v1);uv.setXY(b+2,r.u0,r.v0);uv.setXY(b+3,r.u1,r.v0);}
+  uv.needsUpdate=true;return g;
+}
+
+function init(){
+  document.getElementById('loading').style.display='none';
+  var W=window.innerWidth,H=window.innerHeight;
+  var renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.setSize(W,H);renderer.setClearColor(0x1A1612,1);
+  document.getElementById('stage').appendChild(renderer.domElement);
+  var scene=new THREE.Scene();
+  var CAM_ROT=560, CAM_FLAT=380; // 旋转时远（看全 3D）、摊平后近（墙占满核心区）
+  var cam=new THREE.PerspectiveCamera(45,W/H,1,5000);cam.position.set(0,0,CAM_ROT);cam.lookAt(0,0,0);
+  var atlas=buildAtlas(),tex=new THREE.CanvasTexture(atlas.canvas);
+  tex.magFilter=THREE.LinearFilter;tex.minFilter=THREE.LinearMipmapLinearFilter;tex.anisotropy=renderer.capabilities.getMaxAnisotropy();tex.needsUpdate=true;
+  var mat=new THREE.MeshBasicMaterial({map:tex});
+
+  var rng=mulberry32(20260622);
+  var faces=[buildFace(rng,true),buildFace(rng,false),buildFace(rng,false),buildFace(rng,false),buildFace(rng,false),buildFace(rng,false)];
+  function F(dir,y,x){var g=faces[dir];return (g&&g[y]&&g[y][x])?g[y][x]:pickFiller(rng);}
+
+  // 严丝合缝网格 + 随机缺块（DENS=缺块率0.7，缺70%）+ 每轴列保底 ≥1（6 面投影始终完整）
+  var DENS=0.7, present=[];
+  for(var z=0;z<N;z++){present[z]=[];for(var y=0;y<N;y++){present[z][y]=[];for(var x=0;x<N;x++)present[z][y][x]=rng()>=DENS;}}
+  for(var y=0;y<N;y++)for(var x=0;x<N;x++){var a=false;for(var zz=0;zz<N;zz++)if(present[zz][y][x])a=true;if(!a)present[N-1][y][x]=true;}
+  for(var y=0;y<N;y++)for(var z=0;z<N;z++){var a=false;for(var xx=0;xx<N;xx++)if(present[z][y][xx])a=true;if(!a)present[z][y][N-1]=true;}
+  for(var x=0;x<N;x++)for(var z=0;z<N;z++){var a=false;for(var yy=0;yy<N;yy++)if(present[z][yy][x])a=true;if(!a)present[z][0][x]=true;}
+
+  // 每面「最前方存在块」的朝外面 = 该面字墙字；并记录每个 cube 是否为某面的最前块（frontmostOf[face] = Set<cubeIdx>）
+  var cubes=[], frontOf=[{},{},{},{},{},{}]; // frontOf[dir][cubeIdx]=true
+  function markFm(dir,scan){ /* scan(x,y,z)->遍历该面一格的最前方向 */ }
+  // 直接为每面找最前块并记其朝外面字
+  function setFm(dir){
+    var cells=[];
+    if(dir===0){for(var y=0;y<N;y++)for(var x=0;x<N;x++){var found=-1;for(var z=N-1;z>=0;z--)if(present[z][y][x]){found=z;break;}cells.push({x:x,y:y,z:found,a:y,b:x});}}
+    else if(dir===1){for(var y=0;y<N;y++)for(var x=0;x<N;x++){var found=-1;for(var z=0;z<N;z++)if(present[z][y][x]){found=z;break;}cells.push({x:x,y:y,z:found,a:y,b:x});}}
+    else if(dir===2){for(var y=0;y<N;y++)for(var z=0;z<N;z++){var found=-1;for(var x=N-1;x>=0;x--)if(present[z][y][x]){found=x;break;}cells.push({x:found,y:y,z:z,a:y,b:z});}}
+    else if(dir===3){for(var y=0;y<N;y++)for(var z=0;z<N;z++){var found=-1;for(var x=0;x<N;x++)if(present[z][y][x]){found=x;break;}cells.push({x:found,y:y,z:z,a:y,b:z});}}
+    else if(dir===4){for(var x=0;x<N;x++)for(var z=0;z<N;z++){var found=-1;for(var y=0;y<N;y++)if(present[z][y][x]){found=y;break;}cells.push({x:x,y:found,z:z,a:z,b:x});}}
+    else {for(var x=0;x<N;x++)for(var z=0;z<N;z++){var found=-1;for(var y=N-1;y>=0;y--)if(present[z][y][x]){found=y;break;}cells.push({x:x,y:found,z:z,a:z,b:x});}}
+    return cells; // 每格的最前块坐标 + 该面字墙的 (a,b)
+  }
+  var fmCells=[null];for(var d=1;d<6;d++)fmCells.push(null);
+  for(d=0;d<6;d++) fmCells[d]=setFm(d);
+  // 先建 cube 索引表（present 的 (x,y,z)→idx），再给每面的最前块打标 + 写朝外面字
+  var idxOf={};
+  var cidx=0;
+  for(var z=0;z<N;z++)for(var y=0;y<N;y++)for(var x=0;x<N;x++) if(present[z][y][x]){idxOf[x+','+y+','+z]=cidx;cidx++;}
+  // 每个 cube 默认 6 面填充；按面覆盖最前块的朝外面
+  var cubeChars={};
+  for(d=0;d<6;d++){
+    var FACEBOX=[4,5,0,1,2,3][d]; // dir→BoxGeometry 面序：front4 back5 right0 left1 top2 bottom3
+    fmCells[d].forEach(function(c){var idx=idxOf[c.x+','+c.y+','+c.z]; if(!cubeChars[idx])cubeChars[idx]={}; cubeChars[idx][FACEBOX]=F(d,c.a,c.b); frontOf[d][idx]=true;});
+  }
+  // 建独立 mesh（便于吸附后逐块摊平/缩没）
+  var s=CELL*0.94;
+  for(var z=0;z<N;z++)for(var y=0;y<N;y++)for(var x=0;x<N;x++){
+    if(!present[z][y][x])continue;
+    var idx=idxOf[x+','+y+','+z];
+    var cc=cubeChars[idx]||{};
+    var chars6=[cc[0]||pickFiller(rng),cc[1]||pickFiller(rng),cc[2]||pickFiller(rng),cc[3]||pickFiller(rng),cc[4]||pickFiller(rng),cc[5]||pickFiller(rng)];
+    var m=new THREE.Mesh(makeGeo(s,chars6,atlas.map),mat);
+    m.position.set(-HALF+x*CELL+CELL/2, HALF-y*CELL-CELL/2, -HALF+z*CELL+CELL/2);
+    m.userData={base:m.position.clone(),scale:1};
+    cubes.push(m);
+  }
+  var group=new THREE.Group();cubes.forEach(function(m){group.add(m);});scene.add(group);
+
+  function eq(x,y,z){var q=new THREE.Quaternion();q.setFromEuler(new THREE.Euler(x,y,z,'XYZ'));return q;}
+  var TARGETS=[eq(0,0,0),eq(0,Math.PI,0),eq(0,-Math.PI/2,0),eq(0,Math.PI/2,0),eq(Math.PI/2,0,0),eq(-Math.PI/2,0,0)];
+  var FACENAME=['前(正解)','后','右','左','上','下'];
+  // 每面摊平目标：沿该面轴滑到表面平面（front/back→z=±HALF；right/left→x=±HALF；top/bottom→y=±HALF）
+  var FLAT_AXIS=[2,2,0,0,1,1], FLAT_PLANE=[HALF,-HALF,HALF,-HALF,HALF,-HALF];
+  group.quaternion.copy(TARGETS[3]);
+
+  var FNORMALS=[[0,0,1],[0,0,-1],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0]],_nv=new THREE.Vector3();
+  function nearestFace(q){var bd=-2,best=0;for(var i=0;i<6;i++){_nv.fromArray(FNORMALS[i]).applyQuaternion(q);if(_nv.z>bd){bd=_nv.z;best=i;}}return best;}
+
+  var mode='rotate'; // 'rotate' | 'flat'
+  var anim=null; // {phase:'rot'|'flat'|'unflat',...}
+  function startSnap(face){ mode='busy'; anim={phase:'rot',from:group.quaternion.clone(),to:TARGETS[face],t0:performance.now(),dur:280,face:face}; }
+  function startFlat(face){
+    // 计算每块摊平目标：该面最前块→滑到表面平面；其余→缩没
+    cubes.forEach(function(m,i){ var onWall=frontOf[face][i]; m.userData.flatPos = onWall ? m.userData.base.clone() : null;
+      if(onWall){ var ax=FLAT_AXIS[face]; m.userData.flatPos.setComponent(ax, FLAT_PLANE[face]); } m.userData.flatScale = onWall?1:0; });
+    anim={phase:'flat',t0:performance.now(),dur:450,face:face,camFrom:CAM_ROT,camTo:CAM_FLAT};
+  }
+  function startUnflat(){ mode='busy'; anim={phase:'unflat',t0:performance.now(),dur:380,camFrom:CAM_FLAT,camTo:CAM_ROT}; }
+
+  function apply(){
+    var chips='',f=nearestFace(group.quaternion);
+    for(var i=0;i<6;i++)chips+='<span class="facechip '+(i===f?'on':'')+' '+(i===SOL_FACE?'sol':'')+'"></span>';
+    var txt= mode==='flat'?('已摊平：'+FACENAME[anim?anim.face:f]+'（点墙返回）') : mode==='busy'? '吸附/摊平中…' : ('旋转中 · 当前接近 '+FACENAME[f]);
+    document.getElementById('meta').innerHTML=chips+' '+txt;
+  }
+
+  // 拖拽（仅 rotate 模式）
+  var dragging=false,sx=0,sy=0,basX=0,basY=0;
+  function down(x,y){ if(mode!=='rotate')return; dragging=true; sx=x;sy=y; var e=new THREE.Euler().setFromQuaternion(group.quaternion,'YXZ'); basX=e.y;basY=e.x; }
+  function move(x,y){ if(!dragging)return; group.quaternion.setFromEuler(new THREE.Euler(basY-(y-sy)*0.01, basX+(x-sx)*0.01, 0,'YXZ')); apply(); }
+  function up(){ if(!dragging)return; dragging=false; startSnap(nearestFace(group.quaternion)); apply(); }
+  renderer.domElement.addEventListener('pointerdown',function(e){ if(mode==='flat'){ startUnflat(); return; } renderer.domElement.setPointerCapture(e.pointerId); down(e.clientX,e.clientY); });
+  window.addEventListener('pointermove',function(e){if(dragging)move(e.clientX,e.clientY);});
+  window.addEventListener('pointerup',function(){if(dragging)up();});
+  window.addEventListener('pointercancel',function(){if(dragging){dragging=false;startSnap(nearestFace(group.quaternion));}});
+
+  function ease(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
+  function loop(){
+    requestAnimationFrame(loop);
+    if(anim){
+      var t=Math.min(1,(performance.now()-anim.t0)/anim.dur), e=ease(t);
+      if(anim.phase==='rot'){ group.quaternion.slerpQuaternions(anim.from,anim.to,e); if(t>=1){ startFlat(anim.face); } }
+      else if(anim.phase==='flat'){
+        cam.position.z=anim.camFrom+(anim.camTo-anim.camFrom)*e;
+        cubes.forEach(function(m){ var ud=m.userData; if(ud.flatPos){ m.position.lerpVectors(ud.base,ud.flatPos,e);} var sc=1+(ud.flatScale-1)*e; m.scale.setScalar(sc); });
+        if(t>=1){ mode='flat'; anim=null; }
+      } else if(anim.phase==='unflat'){
+        cam.position.z=anim.camFrom+(anim.camTo-anim.camFrom)*e;
+        cubes.forEach(function(m){ var ud=m.userData; if(ud.flatPos){ m.position.lerpVectors(ud.flatPos,ud.base,e);} var sc=ud.flatScale+(1-ud.flatScale)*e; m.scale.setScalar(sc); });
+        if(t>=1){ mode='rotate'; anim=null; }
+      }
+      apply();
+    }
+    renderer.render(scene,cam);
+  }
+  apply();loop();
+  window.addEventListener('resize',function(){W=window.innerWidth;H=window.innerHeight;cam.aspect=W/H;cam.updateProjectionMatrix();renderer.setSize(W,H);});
+}
+</script>
+</body>
+</html>

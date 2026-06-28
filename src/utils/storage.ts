@@ -12,7 +12,7 @@ const KEYS = {
 
 const DIFFICULTIES: DifficultyLevel[] = ['easy', 'medium', 'hard'];
 const CATEGORIES: PuzzleCategory[] = ['名人名言', '诗词歌赋', '书摘'];
-const MODES: GameMode[] = ['classic', 'blind', 'probe', 'hide'];
+const MODES: GameMode[] = ['classic', 'blind', 'probe', 'hide', 'cube'];
 
 /** 全新玩家的空白统计 */
 export function makeDefaultProgress(): PlayerProgress {
@@ -26,8 +26,8 @@ export function makeDefaultProgress(): PlayerProgress {
     totalCompleted: 0,
     completionsByDifficulty: { easy: 0, medium: 0, hard: 0 },
     completionsByCategory: { 名人名言: 0, 诗词歌赋: 0, 书摘: 0 },
-    completionsByMode: { classic: 0, blind: 0, probe: 0, hide: 0 },
-    bestTimeByMode: { classic: null, blind: null, probe: null, hide: null },
+    completionsByMode: { classic: 0, blind: 0, probe: 0, hide: 0, cube: 0 },
+    bestTimeByMode: { classic: null, blind: null, probe: null, hide: null, cube: null },
     bonusByDate: {},
     totalPlayTimeSec: 0,
     totalRotations: 0,

@@ -224,10 +224,13 @@ export type DifficultyLevel = 'easy' | 'medium' | 'hard';
  *   左上角显示绿色数字徽章 = 当前对字数。
  * - hide（捉迷藏）：双人·同设备轮流玩。A 自定义出题（句子 / 镂空 / 正解角度 / 每局时长），
  *   B 按 classic 渲染解题；不计入任何统计 / 成就（App.handleComplete 对 hide 提前返回）。
+ * - cube（叠嶂）：3D 难度增强模式（实验）。字墙变成 2.5D 立方体堆，只有「正视图」一面是可玩字墙；
+ *   开局从非正面角度切入，玩家旋转堆到正面才显墙，再走 classic 解卡。无计时 / 无道具 / 不计统计
+ *   （App.handleComplete 对 cube 提前返回，同 hide）。
  *
  * blind / probe 固定使用 medium 的卡片/字数，但核心区采用 hard 档大小，倒计时 3 分钟（180s，见 puzzleGenerator.MODE_TIME_LIMIT_SEC）。
  */
-export type GameMode = 'classic' | 'blind' | 'probe' | 'hide';
+export type GameMode = 'classic' | 'blind' | 'probe' | 'hide' | 'cube';
 
 /** 难度档位配置：决定字数范围、核心区大小、卡片大小、镂空散度 */
 export interface DifficultyConfig {

@@ -120,6 +120,32 @@ export function computeCoreAreaCells(
   return { col0, row0, col1: col0 + coreCols - 1, row1: row0 + coreRows - 1 };
 }
 
+/**
+ * 叠嶂（cube）立方体字面在矩形墙里的位置。
+ *
+ * cube 的 layout 是「全屏矩形网格」（gridCols × gridRows），立方体仍是 N×N×N 正方体（N = gridCols，
+ * 纵向取居中一段）。立方体的 N×N 字面 = 矩形墙里居中的一段连续行 [faceRow0, faceRow0+N-1]；名言只在此
+ * 字面行内盖印（见 generatePuzzleFromQuote 的 solRowRange），矩形其余行是 generateGrid 预填的随机字 →
+ * 松手摊平后核心区呈「困难档那样的高矩形」：立方体方阵内容居中、上下用随机字补足成高矩形（用户诉求）。
+ *
+ * 纯函数：生成期与 GameScreen 用同一份 (gridCols, gridRows, coreArea)（均在 layout 内）算同一值 → 零漂移
+ * （同 coreArea-in-layout 防漂移模式）。短屏兜底：核心带行数 < N（极端短屏）时退回整网格居中——可解性只
+ * 依赖字面行本身（名言钳在字面行内、卡片钳在全带，二者交集非空即可解），不依赖字面是否完全落在带内。
+ */
+export function computeCubeFace(
+  gridCols: number,
+  gridRows: number,
+  coreArea: CoreAreaCells,
+): { faceRow0: number; n: number } {
+  const n = gridCols; // 立方体正方体边长 = 屏宽格数；纵向在矩形墙取居中一段
+  const bandRows = coreArea.row1 - coreArea.row0 + 1;
+  const center = Math.round((gridRows - n) / 2); // 字面居中 ≈ 屏中，便于 3D 摊平→2D 淡入对齐
+  const faceRow0 = bandRows >= n
+    ? clampInt(center, coreArea.row0, coreArea.row1 - n + 1) // 带够高：字面在带内居中
+    : Math.max(0, center); // 极端短屏：整网格居中
+  return { faceRow0, n };
+}
+
 // ─── 名言库 ──────────────────────────────────────────
 
 export const PUZZLE_LIBRARY: Puzzle[] = [
@@ -204,6 +230,23 @@ function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/**
+ * 填充墙：rows×cols 全填 FILLER_CHARS（不盖印任何名言）。用于「叠嶂」3D 模式的非正解面 ——
+ * 视觉上是一堵正常字墙，但名言不会完整出现，故 checkSolution 恒假。纯函数，rng 由调用方传入。
+ */
+export function generateFillerGrid(rows: number, cols: number, rng: () => number): string[][] {
+  const grid: string[][] = [];
+  for (let r = 0; r < rows; r++) {
+    grid[r] = [];
+    for (let c = 0; c < cols; c++) {
+      grid[r][c] = FILLER_CHARS[Math.floor(rng() * FILLER_CHARS.length)];
+    }
+  }
+  return grid;
+}
+
+export { mulberry32 };
 
 // ─── 卡片镂空生成 ────────────────────────────────────
 
@@ -399,6 +442,12 @@ export function generatePuzzleFromQuote(
   rng?: () => number,
   fixedHoles?: CardHole[],
   fixedRotation?: number,
+  /**
+   * 叠嶂用：把名言正解位姿的「行」额外钳在立方体 N×N 字面行 [min, max] 内（与核心区行约束求交）。
+   * 缺省时不约束（classic/blind/probe/hide 行为不变）。列向由 coreArea 约束即可（字面 = 全宽）。
+   * 配合 ±half 内缩：镂空 offset 幅度 ≤ half-1（holeSpread≤1），4 个旋转下恒成立 → 镂空严格落在字面行内。
+   */
+  solRowRange?: { min: number; max: number },
 ): { puzzle: Puzzle; layout: PuzzleLayout } {
   const rand = rng || mulberry32(hashCode(puzzle.id + puzzle.quote));
   const quoteLen = puzzle.quote.length;
@@ -411,11 +460,12 @@ export function generatePuzzleFromQuote(
   const mask = generateCardMask(cardSize, holes, rand);
 
   const half = Math.floor(cardSize / 2);
-  // solCol/solRow 限制在核心区内（含 half 边距），保证卡片完整在核心区
+  // solCol/solRow 限制在核心区内（含 half 边距），保证卡片完整在核心区。
+  // solRowRange（叠嶂）：再与立方体字面行求交，把名言行钳在字面内（缺省 -Infinity/Infinity → no-op）。
   const minC = Math.max(0, coreArea.col0 + half);
   const maxC = Math.min(gridCols - 1, coreArea.col1 - half);
-  const minR = Math.max(0, coreArea.row0 + half);
-  const maxR = Math.min(gridRows - 1, coreArea.row1 - half);
+  const minR = Math.max(0, coreArea.row0 + half, solRowRange ? solRowRange.min + half : -Infinity);
+  const maxR = Math.min(gridRows - 1, coreArea.row1 - half, solRowRange ? solRowRange.max - half : Infinity);
   const spanC = Math.max(1, maxC - minC + 1);
   const spanR = Math.max(1, maxR - minR + 1);
 
@@ -528,7 +578,7 @@ export function generateModePuzzle(
     return generateDailyPuzzle(date, 'medium', screenW, screenH);
   }
   const isoDate = date || nowLocalIsoDate();
-  const config = DIFFICULTY_CONFIGS.medium;
+  const config = mode === 'cube' ? DIFFICULTY_CONFIGS.hard : DIFFICULTY_CONFIGS.medium;
   // 种子含 mode，确保 blind / probe / classic 三种「今日题」互不相同
   const seed = Math.abs(hashCode(`${isoDate}|${mode}|medium`));
 
@@ -543,6 +593,22 @@ export function generateModePuzzle(
   const sw = screenW || 375;
   const sh = screenH || 667;
   const cellSize = computeCellSize(sw);
+  if (mode === 'cube') {
+    // 叠嶂：全屏矩形网格（gridCols × gridRows）+ 困难档全带核心区 → 松手摊平后核心区是「困难那样的高矩形」。
+    // 立方体仍是 N×N×N 正方体（N = gridCols），其 N×N 字面 = 矩形墙居中一段连续行 [faceRow0, faceRow0+N-1]；
+    // 名言只在此字面行内盖印（solRowRange），矩形其余行是 generateGrid 预填随机字 → 方阵内容居中、上下随机字补足成高矩形。
+    // 详见 computeCubeFace / voxelFaces / voxelHtml。
+    const gridCols = Math.floor(sw / cellSize);
+    const gridRows = Math.floor(sh / cellSize);
+    const coreArea = computeCoreAreaCells(gridCols, gridRows, config, sw, sh, cellSize);
+    const { faceRow0, n } = computeCubeFace(gridCols, gridRows, coreArea);
+    return generatePuzzleFromQuote(
+      puzzle, config, coreArea, gridCols, gridRows, cellSize,
+      mulberry32(seed + 12345),
+      undefined, undefined,
+      { min: faceRow0, max: faceRow0 + n - 1 },
+    );
+  }
   const gridCols = Math.floor(sw / cellSize);
   const gridRows = Math.floor(sh / cellSize);
   // 核心区用「困难」档大小（maximizeCore 铺满安全带 → 更大搜索空间），

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>字垣 · 叠嶂 3D 预览</title>
+<style>
+  /* ── 字垣叠嶂（3D）渲染原型 ──
+   * CSS 3D 变换与 RN transform 一一对应：
+   *   perspective → {perspective}；rotateY → {rotateY}；translateZ → {translateZ}
+   * RN 无 transform-style:preserve-3d，故 RN 实装改用「4 个 sibling 面、各自完整 transform、
+   * 按深度重排」；本原型用 preserve-3d 只为快速调外观/吸附/卡片对齐，面 transform 公式与 RN 一致。
+   */
+  :root {
+    --bg: #14110A;
+    --wall: #1c1810;
+    --fg: #d9c9a3;
+    --muted: #8a7a55;
+    --accent: #4A90D9;
+    --cell: 30px;
+    --cols: 10;
+    --rows: 16;
+    --gridW: calc(var(--cell) * var(--cols));   /* 300 */
+    --gridH: calc(var(--cell) * var(--rows));   /* 480 */
+    --half: calc(var(--gridW) / 2);             /* 立方体半深 = 半宽（W=D） */
+  }
+  * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font-family: "PingFang SC","Microsoft YaHei",sans-serif; overflow: hidden; touch-action: none; }
+  .stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    perspective: 1300px; perspective-origin: 50% 45%; }
+
+  .cube { position: relative; width: var(--gridW); height: var(--gridH);
+    transform-style: preserve-3d; transform: rotateY(var(--ry,0deg));
+    transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+  .cube.dragging { transition: none; }
+
+  .face { position: absolute; left: 0; top: 0; width: var(--gridW); height: var(--gridH);
+    background: var(--wall); border: 2px solid #2a2418; backface-visibility: hidden;
+    display: grid; grid-template-columns: repeat(var(--cols), var(--cell));
+    grid-template-rows: repeat(var(--rows), var(--cell)); }
+  /* 各面贴到立方体表面：rotateY(φ) translateZ(half)。RN 同公式。 */
+  .face.f0 { transform: rotateY(  0deg) translateZ(var(--half)); }
+  .face.f1 { transform: rotateY( 90deg) translateZ(var(--half)); }
+  .face.f2 { transform: rotateY(180deg) translateZ(var(--half)); }
+  .face.f3 { transform: rotateY(-90deg) translateZ(var(--half)); }
+
+  .cell { display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: var(--muted);
+    /* 立方格肌理：内描边模拟一摞小立方块 */
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.03), inset 0 -2px 4px rgba(0,0,0,.35); }
+  .cell.core { color: var(--fg); }
+  .cell.hit { color: #fff; background: rgba(76,175,80,.28);
+    box-shadow: inset 0 0 0 1.5px #4CAF50; border-radius: 3px; }
+
+  /* 解密卡：吸附时叠在正面中心（屏幕空间，不随立方体旋转） */
+  .card { position: absolute; width: calc(var(--cell) * 5); height: calc(var(--cell) * 5);
+    left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(var(--cardRot,0deg));
+    background: rgba(20,17,10,.0); border: 2px solid var(--accent); border-radius: 10px;
+    display: grid; grid-template-columns: repeat(5, var(--cell));
+    grid-template-rows: repeat(5, var(--cell)); opacity: 0; transition: opacity .2s;
+    pointer-events: none; box-shadow: 0 0 24px rgba(74,144,217,.35); }
+  .card.show { opacity: 1; }
+  .hole { border: 1.5px solid rgba(74,144,217,.5); background: rgba(74,144,217,.10);
+    margin: 1px; border-radius: 3px; }
+
+  .hud { position: fixed; left: 0; right: 0; top: 0; padding: 14px 18px;
+    display: flex; justify-content: space-between; align-items: center; z-index: 5;
+    color: var(--fg); font-size: 14px; }
+  .hud .title { font-weight: 700; letter-spacing: 2px; }
+  .hud .meta { color: var(--muted); font-size: 12px; }
+  .hint { position: fixed; left: 0; right: 0; bottom: 18px; text-align: center;
+    color: var(--muted); font-size: 12px; z-index: 5; }
+  .facechip { display:inline-block; width:10px; height:10px; border-radius:50%; margin:0 2px;
+    background:#3a3320; vertical-align:middle; }
+  .facechip.on { background: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="hud">
+    <span class="title">叠嶂 · 3D 预览</span>
+    <span class="meta" id="meta">面 0 · 0°</span>
+  </div>
+
+  <div class="stage">
+    <div class="cube" id="cube">
+      <div class="face f0" id="face0"></div>
+      <div class="face f1" id="face1"></div>
+      <div class="face f2" id="face2"></div>
+      <div class="face f3" id="face3"></div>
+      <div class="card" id="card"></div>
+    </div>
+  </div>
+
+  <div class="hint">左右拖动旋转 · 松手吸附到最近正面 · 蓝框为解密卡（吸附时显示）</div>
+
+<script>
+  // ── 字符池（字垣 FILLER_CHARS 的一个小样本，仅供预览） ──
+  const FILLER = '的一是在了不和有大这中人为上个我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很知者法性利合';
+  const QUOTE = '千里之行始于足下'; // 正解名言（盖印在正解面）
+
+  const COLS = 10, ROWS = 16, CELL = 30;
+  const SOL_FACE = (Math.random() * 4) | 0; // 随机正解面
+  // 正解位姿（cell 坐标）+ 镂空相对卡中心的偏移
+  const solCol = 4, solRow = 7, solRot = 0;
+  const holes = [[-1,-1],[0,-1],[1,-1],[-1,0],[0,0],[1,0],[-1,1],[0,1]].slice(0, QUOTE.length);
+
+  function randChar(){ return FILLER[(Math.random()*FILLER.length)|0]; }
+
+  function buildFace(faceIdx){
+    const grid = [];
+    for (let r=0;r<ROWS;r++){ const row=[]; for(let c=0;c<COLS;c++) row.push(randChar()); grid.push(row); }
+    if (faceIdx === SOL_FACE){
+      // 盖印名言到正解位姿的镂空格
+      holes.forEach((h,i)=>{
+        const r = solRow + h[1], c = solCol + h[0];
+        if (r>=0&&r<ROWS&&c>=0&&c<COLS) grid[r][c] = QUOTE[i];
+      });
+    }
+    return grid;
+  }
+
+  function renderFace(el, grid, isSolution){
+    el.innerHTML = '';
+    for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
+      const d = document.createElement('div');
+      d.className = 'cell' + (isSolution && Math.abs(r-solRow)<=2 && Math.abs(c-solCol)<=2 ? ' core' : '');
+      // 高亮正解面的镂空正解格
+      if (isSolution && holes.some(h=> solRow+h[1]===r && solCol+h[0]===c)) d.classList.add('hit');
+      d.textContent = grid[r][c];
+      el.appendChild(d);
+    }
+  }
+
+  for (let i=0;i<4;i++) renderFace(document.getElementById('face'+i), buildFace(i), i===SOL_FACE);
+
+  // 解密卡镂空（盖住卡上非镂空格，镂空处透出墙字）
+  const cardEl = document.getElementById('card');
+  for (let i=0;i<25;i++){
+    const d=document.createElement('div');
+    // 卡中心格(2,2)，镂空按 holes 偏移
+    const hr = Math.floor(i/5)-2, hc = (i%5)-2;
+    d.className = holes.some(h=> h[0]===hc && h[1]===hr) ? 'hole' : '';
+    cardEl.appendChild(d);
+  }
+
+  // ── 旋转 + 吸附 ──
+  const cube = document.getElementById('cube');
+  const meta = document.getElementById('meta');
+  let ry = 95;            // 起步非正面（接近 90，落在侧面上）
+  let dragging = false, startX = 0, startRy = 0;
+
+  function apply(){
+    cube.style.setProperty('--ry', ry+'deg');
+    const snapped = Math.abs(((ry%360)+360)%360 % 90) < 3;
+    const face = Math.round((((ry%360)+360)%360)/90) % 4;
+    cardEl.classList.toggle('show', snapped);
+    // 卡片角度随当前面 0（仅原型：卡固定 0°；实装里卡是玩家旋转的）
+    let chips = '';
+    for (let i=0;i<4;i++) chips += `<span class="facechip ${i===face?'on':''}"></span>`;
+    meta.innerHTML = `${chips} 面 ${face} · ${Math.round(ry)}°${face===SOL_FACE?' · 正解面':''}`;
+  }
+  apply();
+
+  function down(x){ dragging=true; cube.classList.add('dragging'); startX=x; startRy=ry; }
+  function move(x){ if(!dragging) return; ry = startRy + (x-startX)*0.45; apply(); }
+  function up(){
+    if(!dragging) return;
+    dragging=false; cube.classList.remove('dragging');
+    // 吸附到最近 90°
+    const snapped = Math.round(ry/90)*90;
+    ry = snapped; apply();
+  }
+
+  cube.addEventListener('mousedown', e=>down(e.clientX));
+  window.addEventListener('mousemove', e=>move(e.clientX));
+  window.addEventListener('mouseup', up);
+  cube.addEventListener('touchstart', e=>down(e.touches[0].clientX), {passive:true});
+  window.addEventListener('touchmove', e=>move(e.touches[0].clientX), {passive:true});
+  window.addEventListener('touchend', up);
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "name": "wordwall",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "字垣 · 文字筑墙，邂逅一句之缘",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -44,7 +44,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
     "react-native-view-shot": "5.1.0",
-    "react-native-web": "^0.21.2"
+    "react-native-web": "^0.21.2",
+    "react-native-webview": "13.16.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",

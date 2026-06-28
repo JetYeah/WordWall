@@ -15,7 +15,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { TextGrid, buildCellStyles } from '../components/TextGrid';
 import { Puzzle, PuzzleLayout, DevModeState, DifficultyLevel, GameResult, GameMode } from '../game/types';
-import { DIFFICULTY_CONFIGS, hashCode, computeCoreAreaCells, MODE_TIME_LIMIT_SEC } from '../game/puzzleGenerator';
+import { DIFFICULTY_CONFIGS, hashCode, computeCoreAreaCells, MODE_TIME_LIMIT_SEC, mulberry32 } from '../game/puzzleGenerator';
+import { generateVoxelFaces } from '../game/voxelFaces';
+import { VoxelPileView, VoxelPileViewHandle } from '../components/VoxelPileView';
 import {
   computeCellSize,
   pixelToGrid,
@@ -116,6 +118,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const cellSize = layoutCellSize ?? computeCellSize(screenW);
   const cardPixelSize = cardShape.size * cellSize;
   const halfCard = cardPixelSize / 2;
+  // 卡片坐标系 Y 原点（cube 现为全屏矩形墙，Y 原点恒 0；保留 ref 供 PanResponder/tryCheck 闭包同步读取）
+  const gridOriginYRef = useRef(0);
+  gridOriginYRef.current = 0;
 
   // 安全区 insets（刘海/底部 home 条）；web 上为 0
   const insets = useSafeAreaInsets();
@@ -163,6 +168,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const coreCellsLayout = layoutCoreArea ?? computeCoreAreaCells(gridCols, gridRows, DIFFICULTY_CONFIGS[difficulty], screenW, screenH, cellSize);
   const { coreX, coreY, coreW, coreH } = useMemo(() => ({
     coreX: gridOffsetX + coreCellsLayout.col0 * cellSize,
+    // 核心区 = 困难档全带（cube 现为全屏矩形墙、Y 原点 0；卡片 / 磨砂 / 金框包围整个高矩形）
     coreY: coreCellsLayout.row0 * cellSize,
     coreW: (coreCellsLayout.col1 - coreCellsLayout.col0 + 1) * cellSize,
     coreH: (coreCellsLayout.row1 - coreCellsLayout.row0 + 1) * cellSize,
@@ -264,6 +270,31 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   // 文字墙视觉噪声种子：用整串 id 的 hash，避免仅按首字符（q01/q02… 同前缀）撞样式
   const gridSeed = Math.abs(hashCode(puzzle.id));
 
+  // ─── 叠嶂（错落立方体堆）模式：6 面 N×N 字墙 ───────────────────
+  // 3D 堆（VoxelPileView）负责旋转寻面；吸附摊平后切到该面的 2D 字墙 + 解密卡解题（平墙、对齐零风险）。
+  // 引擎对 2D string[][] 一无所知，「当前生效网格」= voxelFaces.grids[currentFace]（cube flat 时）。
+  const isCube = mode === 'cube';
+  const voxelFaces = useMemo(
+    () => (isCube ? generateVoxelFaces(layout, mulberry32(Math.abs(hashCode(puzzle.id + '|voxel')))) : null),
+    [isCube, layout, puzzle.id],
+  );
+  // 起步面：seed 派生、且 != 正解面（强制开局搜索，不在正解面上）
+  const cubeStartFace = useMemo(() => {
+    if (!voxelFaces) return 0;
+    const r = mulberry32(Math.abs(hashCode(puzzle.id + '|cubeStart')))();
+    return (voxelFaces.solutionFace + 1 + Math.floor(r * 5)) % 6;
+  }, [voxelFaces, puzzle.id]);
+  const [currentFace, setCurrentFace] = useState(cubeStartFace);
+  // cubePhase: 'rotate'（3D 堆旋转寻面）/ 'flat'（已吸附摊平，2D 字墙 + 卡片解题）
+  const [cubePhase, setCubePhase] = useState<'rotate' | 'flat'>('rotate');
+  const currentFaceRef = useRef(currentFace);
+  currentFaceRef.current = currentFace;
+  const voxelFacesRef = useRef(voxelFaces);
+  voxelFacesRef.current = voxelFaces;
+  const cubeViewRef = useRef<VoxelPileViewHandle>(null);
+  // 当前生效网格（cube flat = 当前面字墙，其它 = layout.grid）；tryCheck / 2D 墙渲染同步读此 ref。
+  const currentGridRef = useRef(grid);
+  currentGridRef.current = isCube && voxelFaces && cubePhase === 'flat' ? voxelFaces.grids[currentFace] : grid;
   // 文字墙样式矩阵：核心层与外围层各算一份。
   // 核心层用 generateCellStyle（固定字号、小角度、偏暗，保证镂空下可读）；
   // 外围「字符微烁」层用 generatePerimeterStyle（字号随机 16–22、旋转 ±8°、更亮，
@@ -272,6 +303,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const perimeterStyles = useMemo(
     () => buildCellStyles(grid, gridSeed, generatePerimeterStyle, cellSize),
     [grid, gridSeed, cellSize],
+  );
+
+  // 叠嶂：立方体 N×N 字面 = 矩形墙居中一段行 [faceRow0, faceRow0+n)；切出 N×N 喂 voxelHtml（其只寻址 [0,N)）。
+  // coreStyles 已是矩形（gridRows 行）→ 切 [faceRow0, faceRow0+n) 得 N×N；每面字不同但样式按 (row,col,seed) 确定、与面无关。
+  const cubeFaceRow0 = voxelFaces?.faceRow0 ?? 0;
+  const cubeN = voxelFaces?.n ?? 0;
+  const cubeGrids = useMemo(
+    () => (voxelFaces ? voxelFaces.grids.map((g) => g.slice(cubeFaceRow0, cubeFaceRow0 + cubeN)) : []),
+    [voxelFaces, cubeFaceRow0, cubeN],
+  );
+  const cubeStyles = useMemo(
+    () => (voxelFaces ? coreStyles.slice(cubeFaceRow0, cubeFaceRow0 + cubeN) : []),
+    [voxelFaces, coreStyles, cubeFaceRow0, cubeN],
   );
 
   // 把 cardCenter 钳制在 activeCore 内（留 halfCard 边距，保证卡片完整在核心区）
@@ -309,7 +353,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       // 否则当核心区宽/高为偶数格时几何中心落在两格之间，进游戏瞬间卡片歪在半格上，
       // 要等玩家拖一次松手才吸附。
       const raw = clampToCore(coreX + coreW / 2, coreY + coreH / 2);
-      const gp = pixelToGrid(raw.x, raw.y, gridOffsetX, 0, cellSize);
+      const gp = pixelToGrid(raw.x, raw.y, gridOffsetX, gridOriginYRef.current, cellSize);
       return clampToCore(
         gridOffsetX + gp.col * cellSize + cellSize / 2,
         gp.row * cellSize + cellSize / 2,
@@ -336,15 +380,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const rotRef = useRef(initialRotation);
 
   // ─── Revealed chars ────────────────────
-  const lastGP = useRef(pixelToGrid(initialCenter.x, initialCenter.y, gridOffsetX, 0, cellSize));
+  const lastGP = useRef(pixelToGrid(initialCenter.x, initialCenter.y, gridOffsetX, gridOriginYRef.current, cellSize));
   const lastRot = useRef(initialRotation);
   const [revealedChars, setRevealedChars] = useState<string[]>(() => {
-    const { col, row } = pixelToGrid(initialCenter.x, initialCenter.y, gridOffsetX, 0, cellSize);
-    return getRevealedChars(grid, col, row, cardShape.holes, initialRotation);
+    const { col, row } = pixelToGrid(initialCenter.x, initialCenter.y, gridOffsetX, gridOriginYRef.current, cellSize);
+    return getRevealedChars(currentGridRef.current, col, row, cardShape.holes, initialRotation);
   });
   const [holeMatches, setHoleMatches] = useState<boolean[]>(() => {
-    const { col, row } = pixelToGrid(initialCenter.x, initialCenter.y, gridOffsetX, 0, cellSize);
-    return getHoleMatches(grid, col, row, cardShape.holes, initialRotation, puzzle.quote);
+    const { col, row } = pixelToGrid(initialCenter.x, initialCenter.y, gridOffsetX, gridOriginYRef.current, cellSize);
+    return getHoleMatches(currentGridRef.current, col, row, cardShape.holes, initialRotation, puzzle.quote);
   });
   const [isComplete, setIsComplete] = useState(viewOnly);
   const startTimeRef = useRef(Date.now());
@@ -353,9 +397,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const totalTime = mode === 'hide'
     ? (hideTimeLimitSec ?? 0)
     : (mode === 'blind' || mode === 'probe') ? MODE_TIME_LIMIT_SEC
+    : mode === 'cube' ? 0
     : DIFFICULTY_CONFIGS[difficulty].timeLimitSec;
-  // 不限时不判失败：只向上累计 elapsed，永不 isFailed
-  const noTimer = mode === 'hide' && totalTime === 0;
+  // 不限时不判失败：只向上累计 elapsed，永不 isFailed（hide 无限 / cube 实验模式均不限时）
+  const noTimer = (mode === 'hide' && totalTime === 0) || mode === 'cube';
   const [remaining, setRemaining] = useState(viewOnly ? 0 : totalTime);
   // 向上计时（仅 noTimer 用）：累计已玩秒数
   const [elapsed, setElapsed] = useState(0);
@@ -423,7 +468,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   // ─── Throttled grid check ───────────────
   const tryCheck = useCallback(
     (px: number, py: number, rot: number) => {
-      const gp = pixelToGrid(px, py, gridOffsetX, 0, cellSize);
+      const gp = pixelToGrid(px, py, gridOffsetX, gridOriginYRef.current, cellSize);
       // 节流：grid 位置 AND 旋转都没变才跳过（旧版只比 row/col，旋转后同格不更新）
       const cellChanged = gp.col !== lastGP.current.col || gp.row !== lastGP.current.row;
       if (!cellChanged && lastRot.current === rot) return;
@@ -439,8 +484,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           void soundManager.playHaptic('selection');
         }
       }
-      const chars = getRevealedChars(grid, gp.col, gp.row, cardShape.holes, rot);
-      const matches = getHoleMatches(grid, gp.col, gp.row, cardShape.holes, rot, puzzle.quote);
+      const chars = getRevealedChars(currentGridRef.current, gp.col, gp.row, cardShape.holes, rot);
+      const matches = getHoleMatches(currentGridRef.current, gp.col, gp.row, cardShape.holes, rot, puzzle.quote);
       const matchCount = matches.filter(Boolean).length;
       const holesLen = cardShape.holes.length;
 
@@ -473,7 +518,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         !isCompleteRef.current &&
         !isFailedRef.current &&
         !devMode.enabled &&
-        checkSolution(grid, gp.col, gp.row, cardShape.holes, rot, puzzle.quote)
+        checkSolution(currentGridRef.current, gp.col, gp.row, cardShape.holes, rot, puzzle.quote)
       ) {
         isCompleteRef.current = true;
         setIsComplete(true);
@@ -499,7 +544,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         onComplete(result);
       }
     },
-    [grid, cardShape.holes, puzzle.quote, startTimeRef, onComplete, devMode.enabled],
+    [cardShape.holes, puzzle.quote, startTimeRef, onComplete, devMode.enabled],
   );
   tryCheckRef.current = tryCheck;
 
@@ -513,7 +558,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     if (isCompleteRef.current) return;
     // clamp 后再吸附，保证 snap 目标始终在核心区内
     const clamped = clampToCore(posRef.current.x, posRef.current.y);
-    const gp = pixelToGrid(clamped.x, clamped.y, gridOffsetX, 0, cellSize);
+    const gp = pixelToGrid(clamped.x, clamped.y, gridOffsetX, gridOriginYRef.current, cellSize);
     const snapX = gridOffsetX + gp.col * cellSize + cellSize / 2;
     const snapY = gp.row * cellSize + cellSize / 2;
     // 双重保险：cell 中心也可能因浮点边缘情况贴近边界，再 clamp 一次
@@ -595,6 +640,38 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       },
     }),
   ).current;
+
+  // ─── 叠嶂：VoxelPileView 吸附摊平落定 → 切到 2D 字墙 + 卡片解题 ──
+  // onFlat(face)：切 currentFace、currentGridRef=该面字墙、重置 lastGP 强制重检、重跑 tryCheck、
+  //   cubePhase='flat'（卡片显形可拖）。解出/失败后忽略。摊平落定音效 + 选择触感。
+  const handleCubeFlat = useCallback((face: number) => {
+    if (isCompleteRef.current || isFailedRef.current) return;
+    currentFaceRef.current = face;
+    setCurrentFace(face);
+    if (voxelFacesRef.current) currentGridRef.current = voxelFacesRef.current.grids[face];
+    // 卡片落到核心区中心（全屏矩形墙、Y 原点 0），吸附到最近格点中心
+    const ccy = ((coreCellsLayout.row0 + coreCellsLayout.row1 + 1) / 2) * cellSize;
+    const ccx = gridOffsetX + ((coreCellsLayout.col0 + coreCellsLayout.col1 + 1) / 2) * cellSize;
+    const gp0 = pixelToGrid(ccx, ccy, gridOffsetX, 0, cellSize);
+    const snapX = gridOffsetX + gp0.col * cellSize + cellSize / 2;
+    const snapY = gp0.row * cellSize + cellSize / 2;
+    posRef.current = { x: snapX, y: snapY };
+    dragBase.current = { x: snapX, y: snapY };
+    cardPos.x.setValue(snapX - halfCard);
+    cardPos.y.setValue(snapY - halfCard);
+    lastGP.current = { col: NaN, row: NaN };
+    tryCheckRef.current(snapX, snapY, rotRef.current);
+    setCubePhase('flat');
+    soundManager.playJuicyEffect('button_click', 'light');
+    void soundManager.playHaptic('selection');
+  }, [gridOffsetX, coreCellsLayout, cellSize, halfCard, cardPos]);
+  // 返回旋转：注入 unflatten → 3D 堆还原；cubePhase='rotate'（卡片隐藏）。解出后不允许再转（保留正解展示）。
+  const handleCubeReturnRotate = useCallback(() => {
+    if (isCompleteRef.current) return;
+    cubeViewRef.current?.unflatten();
+    setCubePhase('rotate');
+    soundManager.playSound('button_click');
+  }, []);
 
   // ─── 角度选择：点击 2×2 角度块某个象限 → 直接旋转到该角度 ─────
   // 被道具「排除角度」禁用的角度不可选；点击当前角度为 no-op（不计旋转次数）。
@@ -829,18 +906,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     // 卡片位置回到核心区中心并吸附到最近格点（与初始落点 initialCenter 一致——
     // 否则重试后卡片同样会歪在半格上）
     const rawRetry = clampRef.current(coreX + coreW / 2, coreY + coreH / 2);
-    const gpRetry = pixelToGrid(rawRetry.x, rawRetry.y, gridOffsetX, 0, cellSize);
+    const gpRetry = pixelToGrid(rawRetry.x, rawRetry.y, gridOffsetX, gridOriginYRef.current, cellSize);
     const freshPos = clampRef.current(
       gridOffsetX + gpRetry.col * cellSize + cellSize / 2,
       gpRetry.row * cellSize + cellSize / 2,
     );
     posRef.current = freshPos;
     dragBase.current = freshPos;
-    lastGP.current = pixelToGrid(freshPos.x, freshPos.y, gridOffsetX, 0, cellSize);
+    lastGP.current = pixelToGrid(freshPos.x, freshPos.y, gridOffsetX, gridOriginYRef.current, cellSize);
     cardPos.x.setValue(freshPos.x - halfCard);
     cardPos.y.setValue(freshPos.y - halfCard);
     // 镂空字符 / 匹配状态
-    const gp = pixelToGrid(freshPos.x, freshPos.y, gridOffsetX, 0, cellSize);
+    const gp = pixelToGrid(freshPos.x, freshPos.y, gridOffsetX, gridOriginYRef.current, cellSize);
     setRevealedChars(getRevealedChars(grid, gp.col, gp.row, cardShape.holes, freshRot));
     setHoleMatches(getHoleMatches(grid, gp.col, gp.row, cardShape.holes, freshRot, puzzle.quote));
     // 道具
@@ -963,6 +1040,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={CONFIG.colors.background} />
 
+      {/* 非 cube 模式：平面字墙（外围微烁 + 静态核心 + 磨砂遮罩 + 核心边框）。cube 模式走下方 3D 立方体墙。 */}
+      {!isCube && (<>
       {/* 外围「字符微烁」：TWINKLE_GROUPS 层叠加，每层一组字符（空间哈希）、各自 opacity 明灭。
           整层覆盖全网格、跳过核心区（核心由下方静态核心层渲染），逐字绝对定位（稀疏、不占位）。
           两端各走最优路径：
@@ -1096,6 +1175,66 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           borderRadius: 8,
         }}
       />
+      </>
+      )}
+
+      {/* 叠嶂（错落立方体堆）：VoxelPileView 旋转寻面（3D）；吸附摊平后切到该面 2D 字墙 + 解密卡解题。
+          3D 堆全程挂载（flat 时淡出 + 不接收触点，便于「返回旋转」注入 unflatten 复位）。
+          flat 阶段 = 平墙解题（经典机制、卡片天然对齐）。 */}
+      {isCube && voxelFaces && (
+        <>
+          <View pointerEvents={cubePhase === 'flat' ? 'none' : 'auto'} style={[StyleSheet.absoluteFill, { opacity: cubePhase === 'flat' ? 0 : 1 }]}>
+            <VoxelPileView
+              ref={cubeViewRef}
+              grids={cubeGrids}
+              n={cubeN}
+              cell={cellSize}
+              startFace={cubeStartFace}
+              solutionFace={voxelFaces.solutionFace}
+              dens={0.7}
+              styles={cubeStyles}
+              onFlat={handleCubeFlat}
+            />
+          </View>
+
+          {/* rotate：旋转寻面提示 */}
+          {cubePhase === 'rotate' && (
+            <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: Math.max(acY - 30, safeTop + 40), alignItems: 'center' }}>
+              <Text style={{ fontSize: 12, color: 'rgba(217,201,163,0.7)', letterSpacing: 2 }}>转一转，找到藏名言的那一面</Text>
+              <Text style={{ marginTop: 4, fontSize: 11, color: 'rgba(217,201,163,0.45)', letterSpacing: 1 }}>拖动旋转 · 松手吸附 · 自动摊平成墙</Text>
+            </View>
+          )}
+
+          {/* flat：吸附摊平后，该面的 2D 字墙 + 解密卡解题 */}
+          {cubePhase === 'flat' && (
+            <>
+              {/* 2D 字墙（当前吸附面，全屏矩形 gridRows×gridCols；正解面 = layout.grid，名言在立方体字面行内，其余随机字补足成高矩形） */}
+              <View style={{ position: 'absolute', left: gridOffsetX, top: 0, width: gridW, height: gridH }}>
+                <TextGrid grid={voxelFaces.grids[currentFace]} seed={gridSeed} cellStyles={coreStyles} cellSize={cellSize} />
+              </View>
+
+              {/* 非核心区磨砂遮罩（同 classic） */}
+              <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <View style={{ position: 'absolute', left: 0, top: 0, right: 0, height: acY, ...PERIMETER_MASK_BG, opacity: 0.5 }} />
+                <View style={{ position: 'absolute', left: 0, top: acY + acH, right: 0, bottom: 0, ...PERIMETER_MASK_BG, opacity: 0.5 }} />
+                <View style={{ position: 'absolute', left: 0, top: acY, width: acX, height: acH, ...PERIMETER_MASK_BG, opacity: 0.5 }} />
+                <View style={{ position: 'absolute', left: acX + acW, top: acY, right: 0, height: acH, ...PERIMETER_MASK_BG, opacity: 0.5 }} />
+              </View>
+
+              {/* 核心解密区金框 */}
+              <View pointerEvents="none" style={{ position: 'absolute', left: acX, top: acY, width: acW, height: acH, borderWidth: 3, borderColor: CONFIG.colors.primary, borderRadius: 8 }} />
+
+              {/* 返回旋转按钮（未解出时可换面继续找；不提示是否正解面，玩家自行判断） */}
+              {!isComplete && !isFailed && (
+                <TouchableOpacity activeOpacity={0.6} onPress={handleCubeReturnRotate} style={{ position: 'absolute', right: 16, top: acY + acH + 10, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, backgroundColor: 'rgba(20,17,10,0.6)', borderWidth: 1, borderColor: '#4A90D9', zIndex: 6, elevation: 6 }}>
+                  <Ionicons name="refresh" size={16} color="#4A90D9" />
+                  <Text style={{ color: '#4A90D9', fontSize: 13, fontWeight: '600' }}>返回旋转</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {/* Decode card — 始终渲染：解出/查看模式下镂空绿色高亮即正解。
           isComplete 后解绑 panHandlers + 旋转按钮 disabled，禁止移动。 */}
@@ -1111,8 +1250,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             { translateY: cardPos.y },
             { rotate: `${rotation}deg` },
           ],
+          // 叠嶂：仅 flat 阶段（2D 字墙解题）显形可拖；rotate 阶段（3D 旋转寻面）隐藏并解绑手势。
+          opacity: isCube ? (cubePhase === 'flat' ? 1 : 0) : 1,
+          // 叠嶂：卡片须在 WebView / 2D 墙之上（Android 靠 elevation 抬到原生 WebView 之上）
+          ...(isCube ? { zIndex: 8, elevation: 8 } : {}),
         }}
-        {...(isComplete || isFailed ? {} : panResponder.panHandlers)}
+        {...(isComplete || isFailed || (isCube && cubePhase !== 'flat') ? {} : panResponder.panHandlers)}
       >
           {/* Card body */}
           <View
@@ -1393,9 +1536,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             <Text style={styles.completeAuthor}>—— {puzzle.author}《{puzzle.source}》</Text>
             <View style={styles.completeBadges}>
               {mode !== 'classic' && (
-                <View style={[styles.completeBadge, { borderColor: mode === 'blind' ? '#9F7AEA' : mode === 'probe' ? '#4FB6C8' : '#FFB347' }]}>
-                  <Text style={[styles.completeBadgeText, { color: mode === 'blind' ? '#9F7AEA' : mode === 'probe' ? '#4FB6C8' : '#FFB347', fontWeight: '700' }]}>
-                    {mode === 'blind' ? '盲人摸象' : mode === 'probe' ? '投石问路' : '捉迷藏'}
+                <View style={[styles.completeBadge, { borderColor: mode === 'blind' ? '#9F7AEA' : mode === 'probe' ? '#4FB6C8' : mode === 'cube' ? '#4A90D9' : '#FFB347' }]}>
+                  <Text style={[styles.completeBadgeText, { color: mode === 'blind' ? '#9F7AEA' : mode === 'probe' ? '#4FB6C8' : mode === 'cube' ? '#4A90D9' : '#FFB347', fontWeight: '700' }]}>
+                    {mode === 'blind' ? '盲人摸象' : mode === 'probe' ? '投石问路' : mode === 'cube' ? '叠嶂' : '捉迷藏'}
                   </Text>
                 </View>
               )}

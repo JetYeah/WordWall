@@ -290,7 +290,7 @@ describe('applyCompletion — 模式（盲人摸象 / 投石问路）', () => {
     s = applyCompletion(s, PUZZLE, mkResult(), { date: '2026-06-14', difficulty: 'medium', now: 1, mode: 'blind' });
     s = applyCompletion(s, PUZZLE, mkResult(), { date: '2026-06-14', difficulty: 'medium', now: 2, mode: 'probe' });
     s = applyCompletion(s, PUZZLE, mkResult(), { date: '2026-06-14', difficulty: 'medium', now: 3, mode: 'classic' });
-    expect(s.completionsByMode).toEqual({ classic: 1, blind: 1, probe: 1, hide: 0 });
+    expect(s.completionsByMode).toEqual({ classic: 1, blind: 1, probe: 1, hide: 0, cube: 0 });
   });
 
   test('bestTimeByMode null 安全（首条写入、之后取最小）', () => {
@@ -348,13 +348,13 @@ describe('成就 — 模式（盲人摸象 / 投石问路）', () => {
 
   test('migrateProgress 默认补全 completionsByMode / bestTimeByMode', () => {
     const m = migrateProgress({ completedDates: ['2026-06-01'] });
-    expect(m.completionsByMode).toEqual({ classic: 0, blind: 0, probe: 0, hide: 0 });
-    expect(m.bestTimeByMode).toEqual({ classic: null, blind: null, probe: null, hide: null });
+    expect(m.completionsByMode).toEqual({ classic: 0, blind: 0, probe: 0, hide: 0, cube: 0 });
+    expect(m.bestTimeByMode).toEqual({ classic: null, blind: null, probe: null, hide: null, cube: null });
   });
 
   test('migrateProgress 保留旧版的模式计数', () => {
     const m = migrateProgress({ completionsByMode: { classic: 5, blind: 2, probe: 1 }, bestTimeByMode: { classic: 60, blind: null, probe: 300 } });
-    expect(m.completionsByMode).toEqual({ classic: 5, blind: 2, probe: 1, hide: 0 });
-    expect(m.bestTimeByMode).toEqual({ classic: 60, blind: null, probe: 300, hide: null });
+    expect(m.completionsByMode).toEqual({ classic: 5, blind: 2, probe: 1, hide: 0, cube: 0 });
+    expect(m.bestTimeByMode).toEqual({ classic: 60, blind: null, probe: 300, hide: null, cube: null });
   });
 });

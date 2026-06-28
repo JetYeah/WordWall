@@ -27,6 +27,8 @@ interface HomeScreenProps {
   onAchievements: () => void;
   /** 捉迷藏：进入出题页（双人·同设备轮流玩） */
   onStartHideSeek: () => void;
+  /** 叠嶂（3D 实验模式）：旋转立方体堆、在四面间寻字 */
+  onStartCube: () => void;
   progress: PlayerProgress;
   favoritesCount: number;
   /** 三种模式「今日已完成」状态：classic 走 completedDates，blind/probe 走附加题记录 */
@@ -48,6 +50,7 @@ const MODE_META: Record<GameMode, { icon: string; title: string; sub: string; ac
   blind: { icon: 'eye-off-outline', title: '盲人摸象', sub: `镂空不透字·仅凭位置感·${MODE_MINUTES} 分钟`, accent: '#9F7AEA' },
   probe: { icon: 'compass-outline', title: '投石问路', sub: `只见对数不见其字·${MODE_MINUTES} 分钟`, accent: '#4FB6C8' },
   hide: { icon: 'people-outline', title: '捉迷藏', sub: '出题给朋友 · 同设备轮流玩', accent: '#FFB347' },
+  cube: { icon: 'cube-outline', title: '叠嶂', sub: '旋转立方·四面寻字（实验）', accent: '#4A90D9' },
 };
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -57,6 +60,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSettings,
   onAchievements,
   onStartHideSeek,
+  onStartCube,
   progress,
   favoritesCount,
   modeDone,
@@ -211,6 +215,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </View>
             </View>
             <Text style={styles.modeSub} numberOfLines={1}>出题给朋友 · 同设备轮流玩</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={CONFIG.colors.textSecondary} />
+        </TouchableOpacity>
+
+        {/* 叠嶂：3D 实验入口（独立卡，四面寻字，不计统计） */}
+        <TouchableOpacity
+          style={[styles.hideSeekCard, { borderColor: `${MODE_META.cube.accent}55` }]}
+          onPress={() => { tick(); onStartCube(); }}
+          activeOpacity={0.82}
+        >
+          <View style={[styles.modeIconWrap, { backgroundColor: `${MODE_META.cube.accent}22` }]}>
+            <Ionicons name="cube-outline" size={26} color={MODE_META.cube.accent} />
+          </View>
+          <View style={styles.modeTextWrap}>
+            <View style={styles.modeTitleRow}>
+              <Text style={styles.modeTitle}>{MODE_META.cube.title}</Text>
+              <View style={[styles.diffChip, { backgroundColor: `${MODE_META.cube.accent}22` }]}>
+                <Text style={[styles.diffChipText, { color: MODE_META.cube.accent }]}>实验</Text>
+              </View>
+            </View>
+            <Text style={styles.modeSub} numberOfLines={1}>{MODE_META.cube.sub}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={CONFIG.colors.textSecondary} />
         </TouchableOpacity>

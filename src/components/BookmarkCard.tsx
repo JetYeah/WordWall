@@ -41,6 +41,7 @@ const MODE_LABELS: Record<GameMode, string> = {
   blind: '盲人摸象',
   probe: '投石问路',
   hide: '捉迷藏',
+  cube: '叠嶂',
 };
 
 /**

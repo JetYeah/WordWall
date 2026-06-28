@@ -125,6 +125,8 @@ export default function App() {
     const rec = date ?? todayIso();
     // 捉迷藏是 ad-hoc 自定义题：不计入任何统计 / 成就 / 历史（庆祝弹窗由 GameScreen 自行展示）。
     if (mode === 'hide') return;
+    // 叠嶂（3D 实验模式）同样不计统计 / 成就（庆祝由 GameScreen 自行展示）。
+    if (mode === 'cube') return;
     // 盲人摸象 / 投石问路 视为「困难」档挑战（hard 核心区 + 3 分钟限时 + 禁用道具）。
     // 此 difficulty 仅作「展示档」存入 GameRecord.difficulty（徽章 / 书签标签用；不影响指纹——
     // 真实 cardHoles cardSize 9 走 buildFingerprintFromData 专有分支）。classic 难度桶
@@ -162,7 +164,7 @@ export default function App() {
   // Dev mode「换题」：同难度字数范围内换一道（排除当前）。模式感知：
   // classic 按当前难度；blind/probe 固定 medium，刷新对应 modeData。
   const handleRegeneratePuzzle = useCallback((mode: GameMode) => {
-    if (mode === 'hide') return; // 捉迷藏无每日 / 题库概念，dev 换题无意义
+    if (mode === 'hide' || mode === 'cube') return; // 捉迷藏无每日；叠嶂按需生成、无 modeData，dev 换题无意义
     const isClassic = mode === 'classic';
     const diff: DifficultyLevel = isClassic ? settings.difficulty : 'medium';
     const config = DIFFICULTY_CONFIGS[diff];
@@ -219,7 +221,7 @@ export default function App() {
 
   // Dev mode「上一题 / 下一题」：在题库中循环（跨难度字数范围，便于测试全库）。模式感知。
   const handleCycleQuote = useCallback((dir: -1 | 1, mode: GameMode) => {
-    if (mode === 'hide') return; // 捉迷藏不循环题库
+    if (mode === 'hide' || mode === 'cube') return; // 捉迷藏 / 叠嶂不循环题库
     const isClassic = mode === 'classic';
     const curId = isClassic ? dailyData?.puzzle.id : modeData[mode]?.puzzle.id;
     const idx = PUZZLE_LIBRARY.findIndex((p) => p.id === curId);
@@ -358,7 +360,7 @@ export default function App() {
           {() => (
             <HomeScreen
               onStartMode={(m: GameMode) => {
-                if (m === 'hide') return; // 捉迷藏走 onStartHideSeek，不应经此入口
+                if (m === 'hide' || m === 'cube') return; // 捉迷藏走 onStartHideSeek、叠嶂走 onStartCube，不经此入口
                 const data = m === 'classic' ? dailyData : modeData[m];
                 if (!data) return;
                 // 仅 classic「今日解密」计入每日进度；blind/probe 为独立挑战，记录解题统计但不计入每日
@@ -379,6 +381,12 @@ export default function App() {
               onSettings={() => navigate('Settings')}
               onAchievements={() => navigate('Achievements')}
               onStartHideSeek={() => navigate('HideSeekBuilder')}
+              onStartCube={() => {
+                // 叠嶂：3D 实验模式。复用 generateModePuzzle（mode 中立，'cube' 自动获独立 seed）。
+                // 不带 date → 永不 viewOnly、不进 bonusByDate；handleComplete 对 cube 提前返回不计统计。
+                const data = generateModePuzzle('cube', todayIsoStr, screenPix.w, screenPix.h);
+                navigate('Game', { puzzle: data.puzzle, layout: data.layout, isDaily: false, mode: 'cube' });
+              }}
               progress={progress}
               favoritesCount={favorites.length}
               modeDone={modeDoneToday}
