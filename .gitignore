@@ -16,8 +16,8 @@ coverage/
 # Build output
 *.aab
 
-# Claude Code local settings (per-machine permissions)
-.claude/settings.local.json
+# Claude Code session/tooling dir (plans, workflows, per-machine settings)
+.claude/
 
 # Local test screenshots
 Screenshot_*.jpg

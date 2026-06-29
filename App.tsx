@@ -14,13 +14,14 @@ import { HideSeekBuilderScreen } from './src/screens/HideSeekBuilderScreen';
 import { BookmarkModal } from './src/components/BookmarkModal';
 import { BookmarkData } from './src/components/BookmarkCard';
 import { Puzzle, PuzzleLayout, PlayerProgress, GameSettings, DevModeState, FavoriteQuote, DifficultyLevel, GameResult, Achievement, GameMode } from './src/game/types';
-import { generateDailyPuzzle, generatePuzzleFromQuote, getRandomQuote, loadPuzzles, DIFFICULTY_CONFIGS, computeCoreAreaCells, PUZZLE_LIBRARY, generateModePuzzle, pickDifficultyForQuote } from './src/game/puzzleGenerator';
+import { generatePuzzleFromQuote, getRandomQuote, loadPuzzles, DIFFICULTY_CONFIGS, computeCoreAreaCells, PUZZLE_LIBRARY, generateModePuzzle, pickDifficultyForQuote, hashCode, mulberry32 } from './src/game/puzzleGenerator';
 import { addPuzzlePure, updatePuzzlePure, deletePuzzlePure, PuzzleDraft } from './src/game/library';
 import type { HideSeekValidation } from './src/game/hideSeek';
 import { loadCustomPuzzles, saveCustomPuzzles } from './src/utils/libraryStore';
 import { applyCompletion, nowLocalIsoDate } from './src/game/stats';
 import { findNewlyUnlocked, getAchievement, TIER_META } from './src/game/achievements';
-import { makeDefaultProgress, loadPlayerProgress, savePlayerProgress, loadGameSettings, saveGameSettings, loadFavorites, saveFavorites } from './src/utils/storage';
+import { makeDefaultProgress, loadPlayerProgress, savePlayerProgress, loadGameSettings, saveGameSettings, loadFavorites, saveFavorites, loadRemoteCache, saveRemoteCache, loadDailyPicked, saveDailyPicked } from './src/utils/storage';
+import { fetchRemoteLibrary, pickDailyQuote, REMOTE_CACHE_TTL_MS } from './src/game/remoteLibrary';
 import { soundManager } from './src/utils/soundManager';
 import { CONFIG } from './src/config';
 import { computeCellSize } from './src/game/engine';
@@ -57,6 +58,12 @@ export default function App() {
   const customPuzzlesRef = useRef<Puzzle[]>([]);
   customPuzzlesRef.current = customPuzzles;
 
+  // 远程题库（GitHub data/quotes.json，经 jsDelivr）+ 当天选题缓存。
+  // remoteLib null = 未拉到 / 用内置兜底；后台 fetch 成功后填充。remoteLibRef 供 callback 闭包同步读最新。
+  const [remoteLib, setRemoteLib] = useState<Puzzle[] | null>(null);
+  const remoteLibRef = useRef<Puzzle[] | null>(null);
+  const [dailyPicked, setDailyPicked] = useState<Record<string, string>>({});
+
   // 全局书签分享弹窗（GameScreen / History 复用同一实例）
   const [bookmarkData, setBookmarkData] = useState<BookmarkData | null>(null);
   // 成就解锁浮层队列
@@ -76,30 +83,64 @@ export default function App() {
 
   // — 初始化：加载存档、生成今日题、初始化音效 —
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const [p, s, favs, custom] = await Promise.all([
+      const [p, s, favs, custom, remoteCache, picked] = await Promise.all([
         loadPlayerProgress(),
         loadGameSettings(),
         loadFavorites(),
         loadCustomPuzzles(),
+        loadRemoteCache(),
+        loadDailyPicked(),
       ]);
+      if (cancelled) return;
       setProgress(p);
       setSettings(s);
       setFavorites(favs);
       setCustomPuzzles(custom);
+      setDailyPicked(picked);
       soundManager.setSoundEnabled(s.soundEnabled);
       soundManager.setHapticEnabled(s.hapticEnabled);
-      const daily = generateDailyPuzzle(undefined, s.difficulty, screenPix.w, screenPix.h);
-      setDailyData(daily);
+
+      // 题源：远程缓存（24h 内新鲜）?? 内置库。首屏不等网络 —— 后台再 fetch 刷新。
+      const cacheFresh = !!(remoteCache && Date.now() - remoteCache.fetchedAt < REMOTE_CACHE_TTL_MS);
+      const source0 = cacheFresh ? remoteCache!.quotes : PUZZLE_LIBRARY;
+      if (cacheFresh) { setRemoteLib(remoteCache!.quotes); remoteLibRef.current = remoteCache!.quotes; }
+
+      // 今天的题：pickDailyQuote（当天缓存命中优先，保证后台刷新后不跳题）→ 本地确定性生成 layout。
+      const today = nowLocalIsoDate();
+      const seed = Math.abs(hashCode(`${today}|${s.difficulty}`));
+      const pick = pickDailyQuote(source0, today, s.difficulty, picked);
+      const nextPicked = { ...picked, [pick.key]: pick.puzzle.id };
+      const cfg = DIFFICULTY_CONFIGS[s.difficulty];
+      const cellSize = computeCellSize(screenPix.w);
+      const gridCols = Math.floor(screenPix.w / cellSize);
+      const gridRows = Math.floor(screenPix.h / cellSize);
+      const coreArea = computeCoreAreaCells(gridCols, gridRows, cfg, screenPix.w, screenPix.h, cellSize);
+      // rng 与 generateDailyPuzzle 同源（seed+12345）→ 无 picked 时与原行为逐字一致；picked 命中则该题在该日的 layout
+      setDailyData(generatePuzzleFromQuote(pick.puzzle, cfg, coreArea, gridCols, gridRows, cellSize, mulberry32(seed + 12345)));
+      setDailyPicked(nextPicked);
+      saveDailyPicked(nextPicked);
+
       setModeData({
-        blind: generateModePuzzle('blind', undefined, screenPix.w, screenPix.h),
-        probe: generateModePuzzle('probe', undefined, screenPix.w, screenPix.h),
+        blind: generateModePuzzle('blind', undefined, screenPix.w, screenPix.h, source0),
+        probe: generateModePuzzle('probe', undefined, screenPix.w, screenPix.h, source0),
       });
-      setHistoryData(loadPuzzles(30, s.difficulty, screenPix.w, screenPix.h));
+      setHistoryData(loadPuzzles(30, s.difficulty, screenPix.w, screenPix.h, source0));
       setReady(true);
+
+      // 后台刷新远程题库（不阻塞首屏）。成功 → 缓存 + 更新 source；今天的题经 dailyPicked 保持不变。
+      void (async () => {
+        const fresh = await fetchRemoteLibrary();
+        if (cancelled || !fresh) return;
+        saveRemoteCache(fresh);
+        remoteLibRef.current = fresh;
+        setRemoteLib(fresh);
+      })();
     })();
     // 音效系统懒加载（首个声音都在用户操作之后，满足自动播放策略）
     soundManager.initialize();
+    return () => { cancelled = true; };
   }, []);
 
   // 设置变化 → 同步音效开关 + 持久化
@@ -194,11 +235,23 @@ export default function App() {
     const next = { ...settings, difficulty: level };
     setSettings(next);
     saveGameSettings(next);
-    const newData = generateDailyPuzzle(undefined, level, screenPix.w, screenPix.h);
-    setDailyData(newData);
-    setHistoryData(loadPuzzles(30, level, screenPix.w, screenPix.h));
+    const source = remoteLibRef.current ?? PUZZLE_LIBRARY;
+    const today = nowLocalIsoDate();
+    const seed = Math.abs(hashCode(`${today}|${level}`));
+    // 换难度是新 picked key（date|level）→ 当天各难度独立稳定；记 picked 并本地生成 layout
+    const pick = pickDailyQuote(source, today, level, dailyPicked);
+    const nextPicked = { ...dailyPicked, [pick.key]: pick.puzzle.id };
+    setDailyPicked(nextPicked);
+    saveDailyPicked(nextPicked);
+    const cfg = DIFFICULTY_CONFIGS[level];
+    const cellSize = computeCellSize(screenPix.w);
+    const gridCols = Math.floor(screenPix.w / cellSize);
+    const gridRows = Math.floor(screenPix.h / cellSize);
+    const coreArea = computeCoreAreaCells(gridCols, gridRows, cfg, screenPix.w, screenPix.h, cellSize);
+    setDailyData(generatePuzzleFromQuote(pick.puzzle, cfg, coreArea, gridCols, gridRows, cellSize, mulberry32(seed + 12345)));
+    setHistoryData(loadPuzzles(30, level, screenPix.w, screenPix.h, source));
     navRef.current?.navigate('Home' as any);
-  }, [settings, screenPix]);
+  }, [settings, screenPix, dailyPicked]);
 
   const handleToggleFavorite = useCallback((puzzle: Puzzle) => {
     setFavorites((prev) => {
@@ -384,7 +437,7 @@ export default function App() {
               onStartCube={() => {
                 // 叠嶂：3D 实验模式。复用 generateModePuzzle（mode 中立，'cube' 自动获独立 seed）。
                 // 不带 date → 永不 viewOnly、不进 bonusByDate；handleComplete 对 cube 提前返回不计统计。
-                const data = generateModePuzzle('cube', todayIsoStr, screenPix.w, screenPix.h);
+                const data = generateModePuzzle('cube', todayIsoStr, screenPix.w, screenPix.h, remoteLibRef.current ?? PUZZLE_LIBRARY);
                 navigate('Game', { puzzle: data.puzzle, layout: data.layout, isDaily: false, mode: 'cube' });
               }}
               progress={progress}

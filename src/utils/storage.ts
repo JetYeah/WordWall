@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PlayerProgress, GameSettings, FavoriteQuote, DifficultyLevel, PuzzleCategory, GameMode } from '../game/types';
+import { PlayerProgress, GameSettings, FavoriteQuote, DifficultyLevel, PuzzleCategory, GameMode, Puzzle } from '../game/types';
 import { CURRENT_SCHEMA_VERSION } from '../game/schema';
 
 export { CURRENT_SCHEMA_VERSION };
@@ -8,6 +8,8 @@ const KEYS = {
   progress: 'decode_card_progress',
   settings: 'decode_card_settings',
   favorites: 'decode_card_favorites',
+  remoteLibrary: 'decode_card_remote_library',
+  dailyPicked: 'decode_card_daily_picked',
 };
 
 const DIFFICULTIES: DifficultyLevel[] = ['easy', 'medium', 'hard'];
@@ -223,5 +225,53 @@ export async function saveFavorites(favorites: FavoriteQuote[]): Promise<void> {
     await AsyncStorage.setItem(KEYS.favorites, JSON.stringify(favorites));
   } catch (e) {
     console.error('saveFavorites:', e);
+  }
+}
+
+// ─── 远程题库缓存 + 每日已选（远程每日一题用）──────────────
+// remoteLibrary: { quotes, fetchedAt } —— fetch 到的远程题库（24h TTL 由调用方判断）
+// dailyPicked: { [`${date}|${difficulty}`]: quoteId } —— 当天选定的题 id，保证后台刷新题库后「今天的题」不跳变
+export interface RemoteLibraryCache {
+  quotes: Puzzle[];
+  fetchedAt: number;
+}
+
+export async function loadRemoteCache(): Promise<RemoteLibraryCache | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.remoteLibrary);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.quotes) || typeof parsed.fetchedAt !== 'number') return null;
+    const quotes = parsed.quotes.filter((q: any) => q && typeof q.id === 'string' && typeof q.quote === 'string');
+    return quotes.length > 0 ? { quotes, fetchedAt: parsed.fetchedAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveRemoteCache(quotes: Puzzle[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.remoteLibrary, JSON.stringify({ quotes, fetchedAt: Date.now() }));
+  } catch (e) {
+    console.error('saveRemoteCache:', e);
+  }
+}
+
+export async function loadDailyPicked(): Promise<Record<string, string>> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.dailyPicked);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveDailyPicked(picked: Record<string, string>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(KEYS.dailyPicked, JSON.stringify(picked));
+  } catch (e) {
+    console.error('saveDailyPicked:', e);
   }
 }

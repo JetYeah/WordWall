@@ -1,6 +1,6 @@
 {
   "name": "wordwall",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "字垣 · 文字筑墙，邂逅一句之缘",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {

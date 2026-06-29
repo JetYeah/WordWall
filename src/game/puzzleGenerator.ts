@@ -392,6 +392,7 @@ export function generateDailyPuzzle(
   difficulty: DifficultyLevel = 'medium',
   screenW?: number,
   screenH?: number,
+  source: Puzzle[] = PUZZLE_LIBRARY,
 ): { puzzle: Puzzle; layout: PuzzleLayout } {
   const isoDate = date || nowLocalIsoDate();
   const config = DIFFICULTY_CONFIGS[difficulty];
@@ -399,12 +400,13 @@ export function generateDailyPuzzle(
   const seed = Math.abs(hashCode(`${isoDate}|${difficulty}`));
   const rng = mulberry32(seed);
 
-  // 在该难度字数范围内确定性选题（按 index 取，不取 random）
-  const pool = PUZZLE_LIBRARY.filter(p => {
+  // 在该难度字数范围内确定性选题（按 index 取，不取 random）。
+  // source 默认内置库；App 可传入远程库（fetch 到的 data/quotes.json），缺省/兜底回退内置。
+  const pool = source.filter(p => {
     const len = p.quote.length;
     return len >= config.quoteLenMin && len <= config.quoteLenMax;
   });
-  const candidates = pool.length > 0 ? pool : PUZZLE_LIBRARY;
+  const candidates = pool.length > 0 ? pool : source;
   const puzzle = candidates[seed % candidates.length];
 
   const sw = screenW || 375;
@@ -507,6 +509,7 @@ export function loadPuzzles(
   difficulty: DifficultyLevel = 'medium',
   screenW?: number,
   screenH?: number,
+  source: Puzzle[] = PUZZLE_LIBRARY,
 ): Array<{ puzzle: Puzzle; layout: PuzzleLayout; date: string }> {
   const result: Array<{ puzzle: Puzzle; layout: PuzzleLayout; date: string }> = [];
   const today = new Date();
@@ -515,7 +518,7 @@ export function loadPuzzles(
     d.setDate(d.getDate() - i);
     const isoDate = nowLocalIsoDate(d);
     try {
-      result.push({ ...generateDailyPuzzle(isoDate, difficulty, screenW, screenH), date: isoDate });
+      result.push({ ...generateDailyPuzzle(isoDate, difficulty, screenW, screenH, source), date: isoDate });
     } catch { break; }
   }
   return result;
@@ -573,21 +576,22 @@ export function generateModePuzzle(
   date?: string,
   screenW?: number,
   screenH?: number,
+  source: Puzzle[] = PUZZLE_LIBRARY,
 ): { puzzle: Puzzle; layout: PuzzleLayout } {
   if (mode === 'classic') {
-    return generateDailyPuzzle(date, 'medium', screenW, screenH);
+    return generateDailyPuzzle(date, 'medium', screenW, screenH, source);
   }
   const isoDate = date || nowLocalIsoDate();
   const config = mode === 'cube' ? DIFFICULTY_CONFIGS.hard : DIFFICULTY_CONFIGS.medium;
   // 种子含 mode，确保 blind / probe / classic 三种「今日题」互不相同
   const seed = Math.abs(hashCode(`${isoDate}|${mode}|medium`));
 
-  // 在 medium 字数范围内确定性选题
-  const pool = PUZZLE_LIBRARY.filter(p => {
+  // 在该模式字数范围内确定性选题（source 默认内置库，可由 App 传入远程库）
+  const pool = source.filter(p => {
     const len = p.quote.length;
     return len >= config.quoteLenMin && len <= config.quoteLenMax;
   });
-  const candidates = pool.length > 0 ? pool : PUZZLE_LIBRARY;
+  const candidates = pool.length > 0 ? pool : source;
   const puzzle = candidates[seed % candidates.length];
 
   const sw = screenW || 375;
