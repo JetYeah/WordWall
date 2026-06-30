@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-29",
+  "updatedAt": "2026-06-30",
   "quotes": [
     {
       "id": "r001",
@@ -1176,6 +1176,426 @@
       "quote": "谁解其中味",
       "author": "曹雪芹",
       "source": "红楼梦",
+      "category": "书摘"
+    },
+    {
+      "id": "r169",
+      "quote": "一碗喉吻润",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r170",
+      "quote": "二碗破孤闷",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r171",
+      "quote": "三碗搜枯肠",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r172",
+      "quote": "四碗发轻汗",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r173",
+      "quote": "五碗肌骨清",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r174",
+      "quote": "六碗通仙灵",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r175",
+      "quote": "唯觉两腋习习清风生",
+      "author": "卢仝",
+      "source": "七碗茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r176",
+      "quote": "一饮涤昏寐",
+      "author": "皎然",
+      "source": "饮茶歌诮崔石使君",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r177",
+      "quote": "再饮清我神",
+      "author": "皎然",
+      "source": "饮茶歌诮崔石使君",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r178",
+      "quote": "三饮便得道",
+      "author": "皎然",
+      "source": "饮茶歌诮崔石使君",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r179",
+      "quote": "一饮涤昏寐再饮清我神",
+      "author": "皎然",
+      "source": "饮茶歌诮崔石使君",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r180",
+      "quote": "洁性不可污",
+      "author": "韦应物",
+      "source": "喜园中茶生",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r181",
+      "quote": "此物信灵味",
+      "author": "韦应物",
+      "source": "喜园中茶生",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r182",
+      "quote": "洁性不可污为饮涤尘烦",
+      "author": "韦应物",
+      "source": "喜园中茶生",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r183",
+      "quote": "落日平台上",
+      "author": "杜甫",
+      "source": "重过何氏五首",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r184",
+      "quote": "春风啜茗时",
+      "author": "杜甫",
+      "source": "重过何氏五首",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r185",
+      "quote": "落日平台上春风啜茗时",
+      "author": "杜甫",
+      "source": "重过何氏五首",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r186",
+      "quote": "香叶嫩芽",
+      "author": "元稹",
+      "source": "一字至七字诗·茶",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r187",
+      "quote": "慕诗客爱僧家",
+      "author": "元稹",
+      "source": "一字至七字诗·茶",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r188",
+      "quote": "洗尽古今人不倦",
+      "author": "元稹",
+      "source": "一字至七字诗·茶",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r189",
+      "quote": "疏香皓齿有余味",
+      "author": "温庭筠",
+      "source": "西陵道士茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r190",
+      "quote": "更觉鹤心通杳冥",
+      "author": "温庭筠",
+      "source": "西陵道士茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r191",
+      "quote": "涧花入井水味香",
+      "author": "温庭筠",
+      "source": "西陵道士茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r192",
+      "quote": "欲知花乳清泠味",
+      "author": "刘禹锡",
+      "source": "西山兰若试茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r193",
+      "quote": "山僧后檐茶数丛",
+      "author": "刘禹锡",
+      "source": "西山兰若试茶歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r194",
+      "quote": "生于顾渚山",
+      "author": "皮日休",
+      "source": "茶中杂咏·茶人",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r195",
+      "quote": "生于顾渚山老在漫石坞",
+      "author": "皮日休",
+      "source": "茶中杂咏·茶人",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r196",
+      "quote": "不羡黄金罍",
+      "author": "陆羽",
+      "source": "六羡歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r197",
+      "quote": "不羡白玉杯",
+      "author": "陆羽",
+      "source": "六羡歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r198",
+      "quote": "不羡黄金罍不羡白玉杯",
+      "author": "陆羽",
+      "source": "六羡歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r199",
+      "quote": "千羡万羡西江水",
+      "author": "陆羽",
+      "source": "六羡歌",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r200",
+      "quote": "溪涨清风拂面",
+      "author": "陆游",
+      "source": "夏日六言",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r201",
+      "quote": "月落繁星满天",
+      "author": "陆游",
+      "source": "夏日六言",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r202",
+      "quote": "西塞山前白鹭飞",
+      "author": "张志和",
+      "source": "渔歌子",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r203",
+      "quote": "桃花流水鳜鱼肥",
+      "author": "张志和",
+      "source": "渔歌子",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r204",
+      "quote": "青箬笠绿蓑衣",
+      "author": "张志和",
+      "source": "渔歌子",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r205",
+      "quote": "斜风细雨不须归",
+      "author": "张志和",
+      "source": "渔歌子",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r206",
+      "quote": "诗酒趁年华",
+      "author": "苏轼",
+      "source": "望江南·超然台作",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r207",
+      "quote": "休对故人思故国",
+      "author": "苏轼",
+      "source": "望江南·超然台作",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r208",
+      "quote": "且将新火试新茶",
+      "author": "苏轼",
+      "source": "望江南·超然台作",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r209",
+      "quote": "春未老风细柳斜斜",
+      "author": "苏轼",
+      "source": "望江南·超然台作",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r210",
+      "quote": "春来江水绿如蓝",
+      "author": "白居易",
+      "source": "忆江南",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r211",
+      "quote": "日出江花红胜火",
+      "author": "白居易",
+      "source": "忆江南",
+      "category": "诗词歌赋"
+    },
+    {
+      "id": "r212",
+      "quote": "南方之嘉木",
+      "author": "陆羽",
+      "source": "茶经·一之源",
+      "category": "名人名言"
+    },
+    {
+      "id": "r213",
+      "quote": "茶者南方之嘉木也",
+      "author": "陆羽",
+      "source": "茶经·一之源",
+      "category": "名人名言"
+    },
+    {
+      "id": "r214",
+      "quote": "上者生烂石",
+      "author": "陆羽",
+      "source": "茶经·一之源",
+      "category": "名人名言"
+    },
+    {
+      "id": "r215",
+      "quote": "上者生烂石中者生砾壤",
+      "author": "陆羽",
+      "source": "茶经·一之源",
+      "category": "名人名言"
+    },
+    {
+      "id": "r216",
+      "quote": "野者上园者次",
+      "author": "陆羽",
+      "source": "茶经·一之源",
+      "category": "名人名言"
+    },
+    {
+      "id": "r217",
+      "quote": "如银似雪",
+      "author": "陆羽",
+      "source": "茶经·四之器",
+      "category": "名人名言"
+    },
+    {
+      "id": "r218",
+      "quote": "精行俭德",
+      "author": "陆羽",
+      "source": "茶经·一之源",
+      "category": "名人名言"
+    },
+    {
+      "id": "r219",
+      "quote": "内清明外直方",
+      "author": "陈曼生",
+      "source": "曼生壶铭",
+      "category": "名人名言"
+    },
+    {
+      "id": "r220",
+      "quote": "内清明外直方吾与尔偕藏",
+      "author": "陈曼生",
+      "source": "曼生壶铭",
+      "category": "名人名言"
+    },
+    {
+      "id": "r221",
+      "quote": "兰为国香",
+      "author": "仲子陵",
+      "source": "幽兰赋",
+      "category": "名人名言"
+    },
+    {
+      "id": "r222",
+      "quote": "兰为国花生彼幽荒",
+      "author": "仲子陵",
+      "source": "幽兰赋",
+      "category": "名人名言"
+    },
+    {
+      "id": "r223",
+      "quote": "饮真茶令人少眠",
+      "author": "张华",
+      "source": "博物志",
+      "category": "名人名言"
+    },
+    {
+      "id": "r224",
+      "quote": "山中方数日世上已千年",
+      "author": "古语",
+      "source": "茶人四部曲·望江南",
+      "category": "名人名言"
+    },
+    {
+      "id": "r225",
+      "quote": "茶浓于血",
+      "author": "王旭烽",
+      "source": "茶人四部曲",
+      "category": "书摘"
+    },
+    {
+      "id": "r226",
+      "quote": "大道至简",
+      "author": "王旭烽",
+      "source": "望江南",
+      "category": "书摘"
+    },
+    {
+      "id": "r227",
+      "quote": "一茶一世界",
+      "author": "王旭烽",
+      "source": "茶人四部曲",
+      "category": "书摘"
+    },
+    {
+      "id": "r228",
+      "quote": "本器之道",
+      "author": "杭嘉和",
+      "source": "望江南",
       "category": "书摘"
     }
   ]
